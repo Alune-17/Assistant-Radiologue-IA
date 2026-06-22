@@ -16,6 +16,9 @@ Return only valid JSON with this schema:
 }
 
 Rules:
+- OVER-DIAGNOSIS IS HEAVILY PENALIZED. Generic AI models tend to hallucinate opacities in healthy lungs. Do NOT default to "suspected_opacity" unless the opacity is extremely obvious and localized.
+- If the lung fields are mostly clear, you MUST choose "normal".
+- If the image quality is poor or findings are ambiguous, you MUST choose "uncertain".
 - No patient history invention.
 - No diagnosis language.
 - If confidence < 0.60, predicted_class must be "uncertain".

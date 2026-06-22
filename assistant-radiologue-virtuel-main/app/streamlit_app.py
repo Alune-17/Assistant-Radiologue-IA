@@ -16,11 +16,11 @@ from src.guardrails import apply_safety_guardrails
 # ── Configuration de la page ─────────────────────────────────────────────────
 st.set_page_config(
     page_title="Assistant Radiologue Virtuel — EFREI",
-    page_icon="🩻",
+    page_icon="🩺",
     layout="wide",
 )
 
-st.title("🩻 Assistant Radiologue Virtuel — prototype pédagogique")
+st.title("Assistant Radiologue Virtuel — prototype pédagogique")
 st.warning(
     "⚠️ **Prototype pédagogique. Non destiné au diagnostic. "
     "Validation par un professionnel qualifié requise.**"
