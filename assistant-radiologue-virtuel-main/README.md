@@ -27,14 +27,50 @@ Prototype pédagogique d'IA médicale multimodale pour apprendre à construire u
 
 Le bon rendu ne cherche pas à impressionner par un modèle spectaculaire. Il démontre une méthode : périmètre limité, baseline reproductible, garde-fous, évaluation, analyse d'erreurs et limites explicites.
 
-## Démarrage rapide
+## Prérequis
 
+Pour commencer à travailler sur ce projet à partir de zéro, vous aurez besoin de :
+1. **Python 3.10+** installé sur votre machine.
+2. **Clé API Groq (Gratuite)** : Utilisée pour exécuter le modèle de vision (Llama 4 Scout). Obtenez-la sur [console.groq.com](https://console.groq.com/keys).
+3. **Clé API Kaggle (Gratuite)** : Nécessaire pour télécharger les vraies radios du dataset CheXpert. Obtenez-la sur [kaggle.com](https://www.kaggle.com/settings) (créez un token API `kaggle.json`).
+
+## Démarrage rapide étape par étape
+
+### 1. Installation de l'environnement
 ```bash
 python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
+# Sur Windows :
+.venv\Scripts\activate
+# Sur Mac/Linux :
+source .venv/bin/activate
+
 pip install -r requirements.txt
-python eval/run_evaluation.py --mode toy
+```
+
+### 2. Configuration des clés API
+Dupliquez le fichier `.env.example` pour créer un fichier `.env` à la racine du projet :
+```bash
+cp .env.example .env
+```
+Ouvrez le fichier `.env` et collez votre clé API Groq à l'intérieur. **Ne commitez jamais le fichier `.env` sur Git !**
+
+### 3. Téléchargement des données réelles (CheXpert)
+Assurez-vous d'avoir configuré vos credentials Kaggle (voir `data/README.md`), puis lancez le script :
+```bash
+python data/download_chexpert.py
+```
+*Cela téléchargera uniquement un sous-ensemble pertinent (30 cas, ~50 Mo) sans polluer votre disque dur avec les 11 Go complets.*
+
+### 4. Lancement de l'interface visuelle (Streamlit)
+Pour tester l'assistant radiologue dans votre navigateur avec vos propres images ou celles téléchargées :
+```bash
 streamlit run app/streamlit_app.py
+```
+
+### 5. Évaluation du modèle
+Pour lancer une évaluation sur les 30 radios téléchargées et générer des métriques complètes :
+```bash
+python eval/run_evaluation.py --mode groq-baseline --cases-csv data/chexpert_subset/chexpert_cases.csv
 ```
 
 ## Smoke test du dépôt
@@ -94,12 +130,12 @@ assistant-radiologue-virtuel/
 
 ## Références techniques
 
-Les pistes avancées doivent rester expérimentales, traçables et justifiées. En particulier, un groupe qui mobilise Gemma, MedGemma, Unsloth, MIMIC-CXR ou CheXpert doit citer la source exacte, la version, les conditions d'accès et les limites d'usage.
+Les pistes avancées doivent rester expérimentales, traçables et justifiées. L'architecture repose actuellement sur l'API **Groq** avec le modèle **Llama 4 Scout** (rapide et gratuit), mais peut être étendue à d'autres solutions.
 
 | Ressource | Usage possible | Référence à citer |
 |---|---|---|
-| Unsloth - Gemma 4 | Fine-tuning LoRA/QLoRA expérimental, uniquement après une baseline simple | [Guide Gemma 4](https://unsloth.ai/docs/models/gemma-4/train), [catalogue des modèles](https://unsloth.ai/docs/get-started/unsloth-model-catalog), [blog Unsloth](https://unsloth.ai/blog) |
-| MedGemma | Baseline ou adaptation médicale image-texte, avec prudence sur les conditions d'accès | [Model card Hugging Face](https://huggingface.co/google/medgemma-4b-pt) |
+| Llama 4 Scout / Groq | Inférence Vision multimodale (Baseline actuelle) | [Groq API](https://console.groq.com/docs/models) |
+| Unsloth - Llama Vision | Fine-tuning LoRA expérimental | [Unsloth AI](https://unsloth.ai/) |
 | MIMIC-CXR / MIMIC-CXR-JPG | Jeu de données de radiographies thoraciques, accès contrôlé et non redistribuable | [MIMIC-CXR](https://physionet.org/content/mimic-cxr/2.1.0/), [MIMIC-CXR-JPG](https://physionet.org/content/mimic-cxr-jpg/2.1.0/) |
 | CheXpert | Jeu de données public de radiographies thoraciques avec rapports associés | [Stanford AIMI - CheXpert](https://aimi.stanford.edu/datasets/chexpert-chest-x-rays) |
 

@@ -10,7 +10,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from PIL import Image
 
-from src.inference import toy_predict, gemini_predict, gemini_predict_baseline, gemini_predict_improved
+from src.inference import toy_predict, groq_predict, groq_predict_baseline, groq_predict_improved
 from src.guardrails import apply_safety_guardrails
 
 # ── Configuration de la page ─────────────────────────────────────────────────
@@ -29,9 +29,9 @@ st.warning(
 # ── Sélecteur de modèle ───────────────────────────────────────────────────────
 MODEL_OPTIONS = {
     "🎲 Toy Baseline (local, sans API)": ("toy", "baseline"),
-    "🤖 Gemini 2.0 Flash — Prompt Baseline": ("gemini", "baseline"),
-    "🤖 Gemini 2.0 Flash — Prompt Amélioré": ("gemini", "improved"),
-    "🌐 Gemini 2.0 Flash — Prompt Français (gemini_prompt.txt)": ("gemini", "fr"),
+    "🤖 Groq Llama 4 Scout — Prompt Baseline": ("groq", "baseline"),
+    "🤖 Groq Llama 4 Scout — Prompt Amélioré": ("groq", "improved"),
+    "🌐 Groq Llama 4 Scout — Prompt Français": ("groq", "fr"),
 }
 
 mode_label = st.selectbox("Modèle d'analyse", list(MODEL_OPTIONS.keys()))
@@ -62,11 +62,11 @@ if uploaded:
             if model_type == "toy":
                 pred = apply_safety_guardrails(toy_predict(tmp_path, mode="baseline"))
             elif prompt_type == "baseline":
-                pred = apply_safety_guardrails(gemini_predict_baseline(tmp_path))
+                pred = apply_safety_guardrails(groq_predict_baseline(tmp_path))
             elif prompt_type == "improved":
-                pred = apply_safety_guardrails(gemini_predict_improved(tmp_path))
+                pred = apply_safety_guardrails(groq_predict_improved(tmp_path))
             else:  # fr
-                pred = apply_safety_guardrails(gemini_predict(tmp_path))
+                pred = apply_safety_guardrails(groq_predict(tmp_path))
 
         # Affichage des métriques principales
         col_class, col_conf, col_quality = st.columns(3)

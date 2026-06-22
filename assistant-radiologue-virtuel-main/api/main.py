@@ -5,7 +5,7 @@ import shutil
 from pathlib import Path
 from fastapi import FastAPI, File, Query, UploadFile
 
-from src.inference import toy_predict, gemini_predict_baseline, gemini_predict_improved
+from src.inference import toy_predict, groq_predict_baseline, groq_predict_improved
 from src.guardrails import apply_safety_guardrails
 
 app = FastAPI(
@@ -18,8 +18,8 @@ UPLOAD_DIR = Path("tmp_uploads")
 # Mapping nom → fonction d'inférence
 MODELS = {
     "toy":              lambda p: toy_predict(p, mode="baseline"),
-    "gemini-baseline":  gemini_predict_baseline,
-    "gemini-improved":  gemini_predict_improved,
+    "groq-baseline":  groq_predict_baseline,
+    "groq-improved":  groq_predict_improved,
 }
 
 
@@ -37,7 +37,7 @@ async def predict(
     file: UploadFile = File(...),
     model: str = Query(
         default="toy",
-        description="Modèle d'inférence : 'toy', 'gemini-baseline' ou 'gemini-improved'.",
+        description="Modèle d'inférence : 'toy', 'groq-baseline' ou 'groq-improved'.",
     ),
 ) -> dict:
     """Analyse une radiographie thoracique frontale et retourne un JSON structuré.

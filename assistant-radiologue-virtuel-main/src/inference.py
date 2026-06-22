@@ -5,24 +5,26 @@ import time
 from typing import Any
 import os
 import json
+import re
+import base64
 import PIL.Image
 from dotenv import load_dotenv
-from google import genai
-from google.genai import types
+
+from groq import Groq
 
 load_dotenv()
 
-# Client Gemini initialisé une seule fois (None si la clé est absente)
-_client: genai.Client | None = None
-if os.getenv("GOOGLE_API_KEY"):
-    _client = genai.Client(api_key=os.environ["GOOGLE_API_KEY"])
+# Client Groq initialisé une seule fois (None si la clé est absente)
+_client: Groq | None = None
+if os.getenv("GROQ_API_KEY"):
+    _client = Groq(api_key=os.environ["GROQ_API_KEY"])
 
 from .preprocessing import basic_quality_flag
 
 WARNING = "Prototype pédagogique. Non destiné au diagnostic. Validation par un professionnel qualifié requise."
 
-# Modèle choisi : gemini-2.0-flash — meilleur compromis disponibilité/quota/stabilité API
-GEMINI_MODEL = "gemini-2.0-flash"
+# Modèle choisi : Llama 4 Scout (modèle Vision officiel en attendant Qwen)
+GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 
 PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 
@@ -80,12 +82,18 @@ def vlm_predict_placeholder(image_path: str | Path, prompt: str) -> dict[str, An
     return toy_predict(image_path, mode="baseline")
 
 
-def _gemini_call(
+def _encode_image(image_path: str | Path) -> str:
+    """Encode une image en base64 pour l'API Groq."""
+    with open(image_path, "rb") as image_file:
+        return base64.b64encode(image_file.read()).decode('utf-8')
+
+
+def _groq_call(
     image_path: str | Path,
     prompt_file: str,
     prompt_version: str,
 ) -> dict[str, Any]:
-    """Fonction interne commune pour tous les appels API Gemini.
+    """Fonction interne commune pour tous les appels API Groq Vision.
 
     Args:
         image_path: Chemin vers l'image à analyser.
@@ -112,15 +120,15 @@ def _gemini_call(
             "Pas un dispositif médical validé",
         ],
         "warning": WARNING,
-        "model_name": GEMINI_MODEL,
+        "model_name": GROQ_MODEL,
         "prompt_version": prompt_version,
         "latency_ms": 0,
     }
 
     if _client is None:
         result["justification"] = (
-            "Clé API GOOGLE_API_KEY manquante dans le fichier .env. "
-            "Créez un fichier .env à la racine du projet avec votre clé."
+            "Clé API GROQ_API_KEY manquante dans le fichier .env. "
+            "Créez un fichier .env à la racine du projet avec votre clé gratuite (console.groq.com)."
         )
         return result
 
@@ -130,18 +138,39 @@ def _gemini_call(
         with open(prompt_path, "r", encoding="utf-8") as f:
             system_prompt = f.read()
 
-        img = PIL.Image.open(image_path)
+        base64_image = _encode_image(image_path)
 
         # Forcer la réponse en JSON pour intégration avec les guardrails
-        response = _client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=[system_prompt, img],
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json"
-            ),
+        # Groq Llama Vision supporte le JSON mode nativement
+        response = _client.chat.completions.create(
+            model=GROQ_MODEL,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": system_prompt},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{base64_image}",
+                            },
+                        },
+                    ],
+                }
+            ],
+            temperature=0.1,
         )
 
-        response_data = json.loads(response.text)
+        response_content = response.choices[0].message.content
+        if not response_content:
+            raise ValueError("Réponse vide de Groq")
+            
+        # Extract JSON using regex to handle markdown wrappers like ```json ... ```
+        json_match = re.search(r"\{.*\}", response_content, re.DOTALL)
+        if json_match:
+            response_data = json.loads(json_match.group(0))
+        else:
+            response_data = json.loads(response_content)
 
         # Extraction sécurisée — on complète les champs potentiellement manquants
         result["predicted_class"] = response_data.get("predicted_class", "uncertain")
@@ -165,34 +194,22 @@ def _gemini_call(
             "Classe incertaine par sécurité."
         )
     except Exception as e:
-        result["justification"] = f"Erreur API Gemini ({type(e).__name__}) : {str(e)[:200]}"
+        result["justification"] = f"Erreur API Groq ({type(e).__name__}) : {str(e)[:200]}"
 
     result["latency_ms"] = int((time.perf_counter() - start) * 1000)
     return result
 
 
-def gemini_predict(image_path: str | Path) -> dict[str, Any]:
-    """Prédiction via l'API Gemini avec le prompt français générique (gemini_prompt.txt).
-
-    Conservé pour compatibilité avec l'interface Streamlit existante.
-    Utilise : prompts/gemini_prompt.txt
-    """
-    return _gemini_call(image_path, "gemini_prompt.txt", "gemini_prompt_v1")
+def groq_predict(image_path: str | Path) -> dict[str, Any]:
+    """Prédiction via l'API Groq avec le prompt générique."""
+    return _groq_call(image_path, "gemini_prompt.txt", "vlm_prompt_v1")
 
 
-def gemini_predict_baseline(image_path: str | Path) -> dict[str, Any]:
-    """Prédiction Gemini avec le prompt baseline anglais (baseline_prompt.txt).
-
-    Prompt simple : analyse basique sans règles d'incertitude strictes.
-    Utilise : prompts/baseline_prompt.txt
-    """
-    return _gemini_call(image_path, "baseline_prompt.txt", "baseline_v1")
+def groq_predict_baseline(image_path: str | Path) -> dict[str, Any]:
+    """Prédiction Groq avec le prompt baseline anglais (baseline_prompt.txt)."""
+    return _groq_call(image_path, "baseline_prompt.txt", "baseline_v1")
 
 
-def gemini_predict_improved(image_path: str | Path) -> dict[str, Any]:
-    """Prédiction Gemini avec le prompt amélioré (improved_prompt.txt).
-
-    Prompt renforcé : règles d'incertitude strictes, vérification des artefacts.
-    Utilise : prompts/improved_prompt.txt
-    """
-    return _gemini_call(image_path, "improved_prompt.txt", "improved_v1")
+def groq_predict_improved(image_path: str | Path) -> dict[str, Any]:
+    """Prédiction Groq avec le prompt amélioré (improved_prompt.txt)."""
+    return _groq_call(image_path, "improved_prompt.txt", "improved_v1")

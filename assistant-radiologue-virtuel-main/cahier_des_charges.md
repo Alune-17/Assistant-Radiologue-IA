@@ -572,19 +572,31 @@ Le dataset synthétique existant (**30 images, ~800 Ko au total**) suffit pour v
 Conserver dans le repo :
 ```
 data/
-  synthetic_cases.csv          # 30 cas synthétiques — pipeline complet
+  synthetic_cases.csv          # 30 cas synthétiques — pipeline de tests
   sample_images/               # 30 images PNG synthétiques (~800 Ko total)
-  README.md                    # Documentation + lien vers dataset public
+  download_chexpert.py         # Script de téléchargement CheXpert via Kaggle API
+  README.md                    # Documentation + sources + licences
 ```
 
-Pour les images publiques réelles (RSNA, CheXpert, NIH ChestXray) :
-1. **NE PAS les commiter** dans le repo
-2. Documenter dans `data/README.md` : source, licence, version, URL de téléchargement
-3. Créer un script `data/download_public_data.py` qui télécharge un **sous-ensemble de 30-50 images** (suffisant pour le registre d'erreurs)
-4. Ajouter le dossier de téléchargement dans `.gitignore`
+Pour les images publiques réelles :
+1. **NE PAS les commiter** — `data/chexpert_subset/` est dans `.gitignore`
+2. Documenter dans `data/README.md` : source, licence, version, URL
+3. Utiliser `data/download_chexpert.py` pour télécharger le sous-ensemble de 30 images
+4. Passer `--cases-csv data/chexpert_subset/chexpert_cases.csv` à `run_evaluation.py`
 
 > [!IMPORTANT]
 > L'évaluation porte sur la **méthode et la documentation**, pas sur la taille du dataset. 30 cas bien annotés et commentés valent plus que 10 Go de données non documentées.
+
+### 10.4 État du dataset CheXpert ✅ TÉLÉCHARGÉ
+
+| Élément | Détail |
+|---------|--------|
+| CSV labels | `amritpal333/chexpert-train-csv-modified` — 223 414 radios labelisées |
+| Images sample | `duong1589/chexpert` — 1 002 vraies radios JPEG (~52 Mo) |
+| Subset généré | 30 cas équilibrés : 10 normal / 10 suspected_opacity / 10 uncertain |
+| CSV de cas | `data/chexpert_subset/chexpert_cases.csv` — compatible `run_evaluation.py` |
+| Reproductibilité | Graine seed=42, script versionné, labels appariés aux images |
+| Prochaine étape | Fournir la clé API Gemini pour lancer l'évaluation réelle |
 
 ---
 
@@ -592,19 +604,40 @@ Pour les images publiques réelles (RSNA, CheXpert, NIH ChestXray) :
 
 ### Session 1 — 22 juin 2026
 
-**Objectif :** Phases 1 & 2 — Nettoyage + baseline Gemini API
+**Objectif :** Phases 1 & 2 — Nettoyage repo + infrastructure API Gemini + dataset réel
+
+#### Nettoyage et conformité (Phase 1)
 
 | Action | Résultat |
 |--------|----------|
 | Migration SDK `google.generativeai` → `google.genai` v2.9.0 | ✅ Terminé |
 | Correction modèle : `gemini-3.5-flash` → `gemini-2.0-flash` | ✅ Terminé |
-| Refactorisation `inference.py` : `_gemini_call()`, baseline, improved | ✅ Terminé |
+| Suppression fichiers interdits : `eval/outputs/`, `medical_ai_evidence.sqlite` | ✅ Terminé |
+| `.env.example` créé, `.env` avec placeholder (clé non commitée) | ✅ Terminé |
+| `.gitignore` enrichi : `data/chexpert_subset/`, `data/*.zip` | ✅ Terminé |
+| Smoke tests : **8/8 passent** | ✅ Terminé |
+
+#### Infrastructure API Gemini (Phase 2 — partiel)
+
+| Action | Résultat |
+|--------|----------|
+| `inference.py` : `_gemini_call()`, `gemini_predict_baseline()`, `gemini_predict_improved()` | ✅ Terminé |
 | `preprocessing.py` : analyse qualité pixel réelle (luminosité, contraste, résolution) | ✅ Terminé |
 | `metrics.py` : sensibilité, spécificité, latence médiane | ✅ Terminé |
-| `run_evaluation.py` : modes `gemini-baseline`, `gemini-improved`, `all-gemini` | ✅ Terminé |
-| `api/main.py` : paramètre `?model=` | ✅ Terminé |
-| `streamlit_app.py` : 4 modes, UI améliorée | ✅ Terminé |
-| Suppression fichiers interdits : `eval/outputs/`, `medical_ai_evidence.sqlite` | ✅ Terminé |
-| Smoke tests : **8/8 passent** | ✅ Terminé |
-| `.env.example` créé, `.env` avec placeholder | ✅ Terminé |
-| **Clé API à renseigner** dans `.env` pour débloquer Phase 2 | 🔄 En attente |
+| `run_evaluation.py` : modes `gemini-baseline`, `gemini-improved`, `all-gemini`, `--cases-csv` | ✅ Terminé |
+| `api/main.py` : paramètre `?model=toy\|gemini-baseline\|gemini-improved` | ✅ Terminé |
+| `streamlit_app.py` : 4 modes, UI enrichie (3 colonnes, spinner, latence) | ✅ Terminé |
+| Évaluation Gemini sur vraies radios | 🔄 **En attente clé API Google** |
+
+#### Dataset réel CheXpert (Phase 2 — données)
+
+| Action | Résultat |
+|--------|----------|
+| Stratégie dataset documentée dans `data/README.md` | ✅ Terminé |
+| `data/download_chexpert.py` : script Kaggle API, mapping labels, sélection équilibrée | ✅ Terminé |
+| Authentification Kaggle CLI v2.2.2 configurée | ✅ Terminé |
+| Téléchargement CSV labels (223 414 radios, ~20 Mo) | ✅ Terminé |
+| Téléchargement images sample (1 002 vraies radios, ~52 Mo) | ✅ Terminé |
+| Génération `chexpert_cases.csv` — 30 cas (10/classe, seed=42) | ✅ Terminé |
+
+**Blocage restant :** clé API Gemini à renseigner dans `.env` → relancer l'évaluation.

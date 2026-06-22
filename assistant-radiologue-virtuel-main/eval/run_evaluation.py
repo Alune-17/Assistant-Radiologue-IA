@@ -9,7 +9,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT))
 
-from src.inference import toy_predict, gemini_predict_baseline, gemini_predict_improved
+from src.inference import toy_predict, groq_predict_baseline, groq_predict_improved
 from src.guardrails import apply_safety_guardrails, validate_prediction
 from src.metrics import summarize_metrics
 from src.database import insert_run, init_db
@@ -18,8 +18,8 @@ from src.database import insert_run, init_db
 INFERENCE_MAP = {
     "baseline": lambda p: toy_predict(p, mode="baseline"),
     "improved":  lambda p: toy_predict(p, mode="improved"),
-    "gemini-baseline": gemini_predict_baseline,
-    "gemini-improved": gemini_predict_improved,
+    "groq-baseline": groq_predict_baseline,
+    "groq-improved": groq_predict_improved,
 }
 
 
@@ -36,17 +36,20 @@ def write_csv(path: Path, rows: list[dict]) -> None:
         w.writeheader(); w.writerows(rows)
 
 
-def run(mode: str, db_path: Path) -> tuple[list[dict], dict]:
-    """Exécute l'évaluation complète sur les 30 cas synthétiques.
+def run(mode: str, db_path: Path, cases_csv: Path | None = None) -> tuple[list[dict], dict]:
+    """Exécute l'évaluation complète sur un jeu de cas.
 
     Args:
         mode: Mode d'inférence ('baseline', 'improved', 'gemini-baseline', 'gemini-improved').
         db_path: Chemin vers la base SQLite pour les logs.
+        cases_csv: Chemin vers le CSV de cas (défaut: data/synthetic_cases.csv).
 
     Returns:
         Tuple (lignes de prédictions, dictionnaire de métriques).
     """
-    cases = read_cases(ROOT / 'data' / 'synthetic_cases.csv')
+    if cases_csv is None:
+        cases_csv = ROOT / 'data' / 'synthetic_cases.csv'
+    cases = read_cases(cases_csv)
     predict_fn = INFERENCE_MAP[mode]
     rows = []
     init_db(db_path)
@@ -86,17 +89,25 @@ def main() -> None:
     )
     parser.add_argument(
         '--mode',
-        choices=['toy', 'baseline', 'improved', 'gemini-baseline', 'gemini-improved', 'all-gemini'],
+        choices=['toy', 'baseline', 'improved', 'groq-baseline', 'groq-improved', 'all-groq'],
         default='baseline',
         help=(
             "'baseline'/'improved' : toy deterministe. "
-            "'gemini-baseline'/'gemini-improved' : vrais appels API Gemini. "
-            "'all-gemini' : compare les deux modes Gemini. "
+            "'groq-baseline'/'groq-improved' : vrais appels API Groq. "
+            "'all-groq' : compare les deux modes Groq. "
             "'toy' : alias pour baseline+improved (toy)."
         ),
     )
     parser.add_argument('--out-dir', type=Path, default=ROOT / 'eval' / 'outputs')
     parser.add_argument('--db-path', type=Path, default=ROOT / 'medical_ai_evidence.sqlite')
+    parser.add_argument(
+        '--cases-csv', type=Path, default=None,
+        help=(
+            "CSV de cas à évaluer. "
+            "Défaut : data/synthetic_cases.csv (images synthétiques). "
+            "Utiliser data/chexpert_subset/chexpert_cases.csv pour les vraies radios CheXpert."
+        ),
+    )
     args = parser.parse_args()
 
     out_dir = args.out_dir
@@ -105,16 +116,17 @@ def main() -> None:
     # Sélection des modes à exécuter
     if args.mode == 'toy':
         modes = ['baseline', 'improved']
-    elif args.mode == 'all-gemini':
-        modes = ['gemini-baseline', 'gemini-improved']
+    elif args.mode == 'all-groq':
+        modes = ['groq-baseline', 'groq-improved']
     else:
         modes = [args.mode]
 
     summary = []
     for mode in modes:
-        rows, metrics = run(mode, args.db_path)
-        write_csv(out_dir / f'{mode}_predictions.csv', rows)
-        (out_dir / f'{mode}_metrics.json').write_text(
+        rows, metrics = run(mode, args.db_path, args.cases_csv)
+        out_suffix = f"_{args.cases_csv.stem}" if args.cases_csv else ""
+        write_csv(out_dir / f'{mode}{out_suffix}_predictions.csv', rows)
+        (out_dir / f'{mode}{out_suffix}_metrics.json').write_text(
             json.dumps(metrics, indent=2, ensure_ascii=False), encoding='utf-8'
         )
         summary.append({'mode': mode, **metrics})

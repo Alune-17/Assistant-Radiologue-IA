@@ -13,5 +13,5 @@ pydicom>=2.4
 transformers>=4.56
 accelerate>=0.34
 torch
-google-genai>=1.0.0
+groq>=0.9.0
 python-dotenv>=1.0.0

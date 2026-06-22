@@ -9,6 +9,13 @@ eval/outputs/
 .env
 .DS_Store
 
+# Données réelles — trop volumineuses et sous licence restrictive
+data/chexpert_subset/
+data/_kaggle_download/
+data/*.zip
+data/sample_images/train/
+data/sample_images/valid/
+
 # Local/professor visual material
 assets/
 
