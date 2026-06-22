@@ -2,7 +2,7 @@
 
 > **Projet :** Solution Delivery — Filière Data, EFREI  
 > **Année académique :** 2025-2026  
-> **Date du document :** 15 juin 2026  
+> **Date du document :** 15 juin 2026 — _mis à jour le 22 juin 2026_  
 > **Source :** Analyse du repository GitHub `assistant-radiologue-virtuel-main`
 
 ---
@@ -18,6 +18,8 @@
 7. [Critères d'évaluation et livrables](#7-critères-dévaluation-et-livrables)
 8. [Contraintes éthiques et réglementaires](#8-contraintes-éthiques-et-réglementaires)
 9. [Stack technique et dépendances](#9-stack-technique-et-dépendances)
+10. [Stratégie dataset — quantité et hébergement](#10-stratégie-dataset--quantité-et-hébergement)
+11. [Journal des sessions de développement](#11-journal-des-sessions-de-développement)
 
 ---
 
@@ -115,23 +117,23 @@ assistant-radiologue-virtuel-main/
 
 | Fichier | Lignes | État | Description |
 |---------|--------|------|-------------|
-| [inference.py](file:///c:/Users/cleme/Desktop/EFREI/ING1-NEW/Mastercamp/SOLUTION%20DELIVERY/assistant-radiologue-virtuel-main/src/inference.py) | 123 | **Fonctionnel** | `toy_predict()` — prédiction déterministe par nom de fichier. `gemini_predict()` — appel API Gemini 3.5 Flash. `vlm_predict_placeholder()` — **stub vide** (renvoie toy_predict) |
+| [inference.py](file:///c:/Users/cleme/Desktop/EFREI/ING1-NEW/Mastercamp/SOLUTION%20DELIVERY/assistant-radiologue-virtuel-main/src/inference.py) | 199 | ✅ **Mis à jour** | SDK migré vers `google.genai`. Modèle `gemini-2.0-flash`. Fonctions : `toy_predict()`, `gemini_predict()`, `gemini_predict_baseline()`, `gemini_predict_improved()`. Client singleton `_client`. |
 | [guardrails.py](file:///c:/Users/cleme/Desktop/EFREI/ING1-NEW/Mastercamp/SOLUTION%20DELIVERY/assistant-radiologue-virtuel-main/src/guardrails.py) | 39 | **Fonctionnel** | Validation JSON, warning obligatoire, fallback `uncertain` |
-| [preprocessing.py](file:///c:/Users/cleme/Desktop/EFREI/ING1-NEW/Mastercamp/SOLUTION%20DELIVERY/assistant-radiologue-virtuel-main/src/preprocessing.py) | 32 | **Minimal** | Chargement image + quality flag basique (par nom de fichier) |
-| [metrics.py](file:///c:/Users/cleme/Desktop/EFREI/ING1-NEW/Mastercamp/SOLUTION%20DELIVERY/assistant-radiologue-virtuel-main/src/metrics.py) | 50 | **Fonctionnel** | Accuracy, macro-F1, confusion, résumé. Manque : sensibilité, spécificité, latence médiane |
+| [preprocessing.py](file:///c:/Users/cleme/Desktop/EFREI/ING1-NEW/Mastercamp/SOLUTION%20DELIVERY/assistant-radiologue-virtuel-main/src/preprocessing.py) | 65 | ✅ **Mis à jour** | Analyse réelle : luminosité moyenne, contraste (std), résolution minimale, ratio d'aspect. Remplace le flag basé sur le nom de fichier. |
+| [metrics.py](file:///c:/Users/cleme/Desktop/EFREI/ING1-NEW/Mastercamp/SOLUTION%20DELIVERY/assistant-radiologue-virtuel-main/src/metrics.py) | 86 | ✅ **Mis à jour** | + `sensitivity()`, `specificity()`, `median_latency()`. `summarize_metrics()` enrichi. |
 | [database.py](file:///c:/Users/cleme/Desktop/EFREI/ING1-NEW/Mastercamp/SOLUTION%20DELIVERY/assistant-radiologue-virtuel-main/src/database.py) | 42 | **Fonctionnel** | Connexion SQLite, `init_db()`, `insert_run()` |
 
 #### API (`api/`)
 
 | Fichier | État | Description |
 |---------|------|-------------|
-| [main.py](file:///c:/Users/cleme/Desktop/EFREI/ING1-NEW/Mastercamp/SOLUTION%20DELIVERY/assistant-radiologue-virtuel-main/api/main.py) | **Fonctionnel** | FastAPI avec `GET /` (health) et `POST /predict`. Utilise uniquement `toy_predict` en mode `improved` |
+| [main.py](file:///c:/Users/cleme/Desktop/EFREI/ING1-NEW/Mastercamp/SOLUTION%20DELIVERY/assistant-radiologue-virtuel-main/api/main.py) | ✅ **Mis à jour** | FastAPI avec `GET /` (health + liste modèles) et `POST /predict?model=toy\|gemini-baseline\|gemini-improved`. |
 
 #### Applications web (`app/`)
 
 | Fichier | État | Description |
 |---------|------|-------------|
-| [streamlit_app.py](file:///c:/Users/cleme/Desktop/EFREI/ING1-NEW/Mastercamp/SOLUTION%20DELIVERY/assistant-radiologue-virtuel-main/app/streamlit_app.py) | **Fonctionnel** | Upload d'image, sélecteur de modèle (Toy/Gemini), affichage résultats + JSON |
+| [streamlit_app.py](file:///c:/Users/cleme/Desktop/EFREI/ING1-NEW/Mastercamp/SOLUTION%20DELIVERY/assistant-radiologue-virtuel-main/app/streamlit_app.py) | ✅ **Mis à jour** | 4 modes : Toy baseline, Gemini baseline, Gemini improved, Gemini prompt français. UI enrichie (3 colonnes, latence, spinner). |
 | [gradio_app.py](file:///c:/Users/cleme/Desktop/EFREI/ING1-NEW/Mastercamp/SOLUTION%20DELIVERY/assistant-radiologue-virtuel-main/app/gradio_app.py) | **Fonctionnel** | Interface Gradio minimale, mode baseline/improved uniquement |
 
 #### Données (`data/`)
@@ -173,20 +175,20 @@ assistant-radiologue-virtuel-main/
 
 | # | Problème | Fichier | Gravité |
 |---|----------|---------|---------|
-| 1 | **Base SQLite commitée** | `medical_ai_evidence.sqlite` (90 Ko) | 🟠 **MAJEUR** — Présente bien que listée dans `.gitignore`. Signe d'un mauvais nettoyage |
-| 2 | **eval/outputs/ commité** | `eval/outputs/` (5 fichiers) | 🟠 **MAJEUR** — Listé comme interdit dans les tests mais présent |
-| 3 | **`.venv/` commité** | Répertoire `.venv/` | 🟠 **MAJEUR** — Environnement virtuel dans le repo |
+| 1 | **Base SQLite commitée** | `medical_ai_evidence.sqlite` (90 Ko) | ✅ **RÉSOLU** — Supprimé du repo |
+| 2 | **eval/outputs/ commité** | `eval/outputs/` (5 fichiers) | ✅ **RÉSOLU** — Supprimé du repo |
+| 3 | **`.venv/` commité** | Répertoire `.venv/` | 🟠 **À nettoyer de l'historique Git** |
 
 ### 3.2 Problèmes modérés
 
 | # | Problème | Impact |
 |---|----------|--------|
-| 5 | Le `toy_predict` lit les labels **à partir du nom de fichier** → accuracy 100% artificielle | Les métriques actuelles sont trompeuses |
-| 6 | `vlm_predict_placeholder()` est un **stub** qui renvoie simplement `toy_predict` | Pas de vraie inférence VLM |
-| 7 | Le `basic_quality_flag()` est basé sur le nom du fichier, pas sur l'image | Aucune analyse de qualité réelle |
-| 8 | Baseline et improved ont des **métriques identiques** (1.0 partout) | Aucune comparaison réelle n'a été faite |
-| 9 | Notebooks (`.ipynb`) probablement vides ou squelettes | Non vérifiables sans exécution |
-| 10 | `gemini_predict()` référence `gemini-3.5-flash` — vérifier la disponibilité du modèle | Peut échouer à l'exécution |
+| 5 | Le `toy_predict` lit les labels **à partir du nom de fichier** → accuracy 100% artificielle | ⚠️ Toujours présent — c'est le comportement attendu du toy |
+| 6 | `vlm_predict_placeholder()` est un **stub** qui renvoie simplement `toy_predict` | ⚠️ Toujours présent — stub conservé pour HuggingFace |
+| 7 | Le `basic_quality_flag()` était basé sur le nom du fichier | ✅ **RÉSOLU** — Analyse pixel réelle implementée |
+| 8 | Baseline et improved avaient des **métriques identiques** (1.0 partout) | 🔄 En attente clé API — test réel à faire |
+| 9 | Notebooks probablement vides | 🔄 À faire Phase 2 |
+| 10 | `gemini_predict()` référençait `gemini-3.5-flash` — inexistant | ✅ **RÉSOLU** — Corrigé vers `gemini-2.0-flash` |
 
 ### 3.3 Problèmes mineurs
 
@@ -339,33 +341,33 @@ assistant-radiologue-virtuel-main/
 
 ## 6. Plan de réalisation par phases
 
-### Phase 1 — Nettoyage et mise en conformité (Priorité : immédiate)
+### Phase 1 — Nettoyage et mise en conformité ✅ TERMINÉE
 
-| # | Tâche | Effort estimé |
-|---|-------|---------------|
-| 1.1 | Générer une nouvelle Clé API Google et créer un `.env.example` | 30 min |
-| 1.2 | Supprimer `medical_ai_evidence.sqlite` du repo | 15 min |
-| 1.3 | Supprimer `eval/outputs/` du repo (conserver dans `.gitignore`) | 15 min |
-| 1.4 | Supprimer `.venv/` du repo | 15 min |
-| 1.5 | Vérifier et nettoyer l'historique Git (`git filter-branch` ou BFG) | 1h |
-| 1.6 | Vérifier que le CI passe après nettoyage | 30 min |
+| # | Tâche | Effort estimé | Statut |
+|---|-------|---------------|--------|
+| 1.1 | Générer une nouvelle Clé API Google et créer un `.env.example` | 30 min | ✅ `.env.example` créé, `.env` avec placeholder |
+| 1.2 | Supprimer `medical_ai_evidence.sqlite` du repo | 15 min | ✅ Supprimé |
+| 1.3 | Supprimer `eval/outputs/` du repo | 15 min | ✅ Supprimé |
+| 1.4 | Supprimer `.venv/` du repo | 15 min | 🔄 À nettoyer de l'historique Git |
+| 1.5 | Vérifier et nettoyer l'historique Git | 1h | 🔄 À faire |
+| 1.6 | Vérifier que le CI passe après nettoyage | 30 min | ✅ **8/8 smoke tests passent** |
 
-**Durée totale Phase 1 : ~2h30**
+**Durée totale Phase 1 : ~2h30** — ✅ Essentiellement complète
 
 ---
 
-### Phase 2 — Baseline fonctionnelle avec vrai modèle (Priorité : haute)
+### Phase 2 — Baseline fonctionnelle avec vrai modèle 🔄 EN COURS
 
-| # | Tâche | Effort estimé |
-|---|-------|---------------|
-| 2.1 | Configurer et tester l'accès API Gemini (nouvelle clé) | 1h |
-| 2.2 | Adapter `gemini_predict()` — vérifier le nom du modèle, la réponse | 2h |
-| 2.3 | Exécuter la baseline sur les 30 cas synthétiques avec Gemini | 1h |
-| 2.4 | Implémenter une vraie analyse de qualité image dans `preprocessing.py` | 2h |
-| 2.5 | Ajouter sensibilité, spécificité, latence médiane dans `metrics.py` | 1h |
-| 2.6 | Documenter le notebook `01_baseline_vlm.ipynb` | 2h |
+| # | Tâche | Effort estimé | Statut |
+|---|-------|---------------|--------|
+| 2.1 | Configurer et tester l'accès API Gemini (nouvelle clé) | 1h | 🔄 **Clé API à renseigner dans `.env`** |
+| 2.2 | Adapter `gemini_predict()` — SDK `google.genai`, modèle `gemini-2.0-flash` | 2h | ✅ Fait — `_gemini_call()`, `gemini_predict_baseline()`, `gemini_predict_improved()` |
+| 2.3 | Exécuter la baseline sur les 30 cas synthétiques avec Gemini | 1h | 🔄 **En attente de la clé API** |
+| 2.4 | Implémenter une vraie analyse de qualité image dans `preprocessing.py` | 2h | ✅ Fait — luminosité, contraste (std), résolution, ratio |
+| 2.5 | Ajouter sensibilité, spécificité, latence médiane dans `metrics.py` | 1h | ✅ Fait |
+| 2.6 | Documenter le notebook `01_baseline_vlm.ipynb` | 2h | 🔄 À faire après obtention des résultats Gemini |
 
-**Durée totale Phase 2 : ~9h**
+**Durée totale Phase 2 : ~9h** — 🔄 60% complète, bloquée sur clé API
 
 ---
 
@@ -510,13 +512,13 @@ assistant-radiologue-virtuel-main/
 | `pillow` | ≥10.4 | Traitement d'image |
 | `pandas` | ≥2.2 | Manipulation de données |
 | `scikit-learn` | ≥1.5 | Métriques (non utilisé dans le code actuel) |
-| `numpy` | ≥1.26 | Calcul numérique |
+| `numpy` | ≥1.26 | Calcul numérique — utilisé dans `preprocessing.py` |
 | `opencv-python` | ≥4.10 | Vision (non utilisé dans le code actuel) |
 | `pydicom` | ≥2.4 | DICOM (non utilisé dans le code actuel) |
 | `transformers` | ≥4.56 | Modèles HuggingFace (pour COULD) |
 | `accelerate` | ≥0.34 | Accélération GPU (pour COULD) |
 | `torch` | Latest | PyTorch (pour COULD) |
-| `google-generativeai` | ≥0.8.2 | API Gemini |
+| `google-genai` | ≥1.0.0 | ✅ API Gemini — remplace `google-generativeai` (déprécié) |
 | `python-dotenv` | ≥1.0.0 | Chargement `.env` |
 
 ### 9.2 Dépendances de test
@@ -537,3 +539,72 @@ assistant-radiologue-virtuel-main/
 
 > [!NOTE]
 > Plusieurs dépendances sont déclarées mais **pas utilisées** dans le code actuel : `scikit-learn`, `opencv-python`, `pydicom`, `transformers`, `accelerate`, `torch`. Elles sont là pour les phases COULD (fine-tuning LoRA). Envisager de les séparer dans un `requirements-optional.txt` pour alléger l'installation de base.
+
+---
+
+## 10. Stratégie dataset — quantité et hébergement
+
+> [!CAUTION]
+> **GitHub refuse les dépôts > 1 Go et les fichiers > 100 Mo.** Un dataset de 10 Go ne peut pas être poussé sur GitHub directement.
+
+### 10.1 Ce que l'appel d'offre exige réellement
+
+L'appel d'offre demande :
+- Un **registre d'erreurs sur 20 à 30 cas commentés** (pas 10 Go)
+- Un jeu de données **documenté, cité, avec licence** (pas nécessairement téléchargé)
+- Des images **synthétiques ou publiques dé-identifiées**
+
+Le dataset synthétique existant (**30 images, ~800 Ko au total**) suffit pour valider le pipeline. Les 30 cas couvrent les 3 classes (10 normaux, 10 opacités, 10 incertains) et les splits smoke/final.
+
+### 10.2 Que faire d'un dataset de 10 Go
+
+| Option | Recommandation | Détail |
+|--------|---------------|--------|
+| **Ne pas pousser 10 Go sur GitHub** | ✅ Recommandé | GitHub limite à 1 Go par repo, 100 Mo par fichier |
+| **Git LFS** | ⚠️ Partiel | 1 Go gratuit seulement — insuffisant pour 10 Go |
+| **Hugging Face Datasets** | ✅ Solution idéale | Hébergement gratuit, versioning, citation DOI — `datasets` library |
+| **Google Drive / lien externe** | ✅ Acceptable | Documenter l'URL et la licence dans `data/README.md` |
+| **Kaggle Datasets** | ✅ Acceptable | Hébergement gratuit avec versioning |
+| **Zenodo** | ✅ Pour publication | DOI citable, idéal pour rapport académique |
+
+### 10.3 Recommandation pour ce projet
+
+Conserver dans le repo :
+```
+data/
+  synthetic_cases.csv          # 30 cas synthétiques — pipeline complet
+  sample_images/               # 30 images PNG synthétiques (~800 Ko total)
+  README.md                    # Documentation + lien vers dataset public
+```
+
+Pour les images publiques réelles (RSNA, CheXpert, NIH ChestXray) :
+1. **NE PAS les commiter** dans le repo
+2. Documenter dans `data/README.md` : source, licence, version, URL de téléchargement
+3. Créer un script `data/download_public_data.py` qui télécharge un **sous-ensemble de 30-50 images** (suffisant pour le registre d'erreurs)
+4. Ajouter le dossier de téléchargement dans `.gitignore`
+
+> [!IMPORTANT]
+> L'évaluation porte sur la **méthode et la documentation**, pas sur la taille du dataset. 30 cas bien annotés et commentés valent plus que 10 Go de données non documentées.
+
+---
+
+## 11. Journal des sessions de développement
+
+### Session 1 — 22 juin 2026
+
+**Objectif :** Phases 1 & 2 — Nettoyage + baseline Gemini API
+
+| Action | Résultat |
+|--------|----------|
+| Migration SDK `google.generativeai` → `google.genai` v2.9.0 | ✅ Terminé |
+| Correction modèle : `gemini-3.5-flash` → `gemini-2.0-flash` | ✅ Terminé |
+| Refactorisation `inference.py` : `_gemini_call()`, baseline, improved | ✅ Terminé |
+| `preprocessing.py` : analyse qualité pixel réelle (luminosité, contraste, résolution) | ✅ Terminé |
+| `metrics.py` : sensibilité, spécificité, latence médiane | ✅ Terminé |
+| `run_evaluation.py` : modes `gemini-baseline`, `gemini-improved`, `all-gemini` | ✅ Terminé |
+| `api/main.py` : paramètre `?model=` | ✅ Terminé |
+| `streamlit_app.py` : 4 modes, UI améliorée | ✅ Terminé |
+| Suppression fichiers interdits : `eval/outputs/`, `medical_ai_evidence.sqlite` | ✅ Terminé |
+| Smoke tests : **8/8 passent** | ✅ Terminé |
+| `.env.example` créé, `.env` avec placeholder | ✅ Terminé |
+| **Clé API à renseigner** dans `.env` pour débloquer Phase 2 | 🔄 En attente |
