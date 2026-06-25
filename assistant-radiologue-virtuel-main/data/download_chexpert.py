@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
 """
-Script de téléchargement optimisé CheXpert depuis Kaggle.
+Script de téléchargement CheXpert depuis Kaggle (source officielle).
 
-Stratégie :
-  - CSV des labels : amritpal333/chexpert-train-csv-modified (~20 Mo, 220K labels)
-  - Images         : duong1589/chexpert (~52 Mo, ~1000 vraies radios disponibles)
-
-Avantage : on ne télécharge PAS les 11 Go du dataset complet.
+Source unique : ashery/chexpert
+  - Dataset officiel CheXpert v1.0 de Stanford AIMI (~11 Go)
+  - Inclut les labels (train.csv) ET les images (train/ + valid/)
+  - Seul dataset Kaggle avec la licence Stanford correctement mentionnée
+  - URL : https://www.kaggle.com/datasets/ashery/chexpert
 
 PRÉREQUIS :
   1. kaggle.json configuré dans ~/.kaggle/kaggle.json
-  2. Accepter les conditions des datasets sur Kaggle :
-     - https://www.kaggle.com/datasets/amritpal333/chexpert-train-csv-modified
-     - https://www.kaggle.com/datasets/duong1589/chexpert
+  2. Accepter les conditions du dataset sur Kaggle :
+     - https://www.kaggle.com/datasets/ashery/chexpert
   3. Package kaggle installé : .venv\\Scripts\\pip install kaggle
 
 UTILISATION :
@@ -35,11 +34,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-# ── Configuration Kaggle ───────────────────────────────────────────────────────
-DATASET_CSV    = "amritpal333/chexpert-train-csv-modified"   # labels CSV (20 Mo)
-DATASET_IMAGES = "duong1589/chexpert"                        # images sample (52 Mo)
+# ── Configuration Kaggle ───────────────────────────────────────────────────────────────────────────────
+DATASET = "ashery/chexpert"   # Source officielle Stanford AIMI (train + labels)
 
-DEFAULT_OUT_DIR     = ROOT / "data" / "chexpert_subset"
+DEFAULT_OUT_DIR     = ROOT / "data" / "chexpert_eval"
 DEFAULT_N_PER_CLASS = 10   # 10 × 3 classes = 30 cas
 
 # Colonnes CheXpert indiquant une opacité pulmonaire
@@ -127,23 +125,31 @@ def build_cases_csv(
     """
     random.seed(seed)
     images_out = out_dir / "images"
+    # Nettoyer le dossier images existant pour repartir d'un état propre
+    # (évite de mélanger les images d'un ancien run bugué avec les nouvelles)
+    if images_out.exists():
+        shutil.rmtree(images_out)
     images_out.mkdir(parents=True, exist_ok=True)
 
-    # Indexer les images disponibles (depuis le sample duong1589)
-    available_images: dict[str, Path] = {}
+    # Indexer les images disponibles (depuis le sample duong1589).
+    # On construit deux index :
+    #   1. available_3 : patient/study/filename  → Path  (match exact)
+    #   2. available_p : patient                → list[Path]  (fallback si étude absente)
+    #
+    # ATTENTION : ne pas utiliser img.name seul comme clé, car tous les fichiers
+    # s'appellent "view1_frontal.jpg" → collision, une seule image conservée !
+    available_3: dict[str, Path]       = {}
+    available_p: dict[str, list[Path]] = {}
     for img in images_root.rglob("*.jpg"):
-        # Clé : patient + study + filename (pour matcher avec le CSV)
-        # Exemple de path CheXpert : patient00028/study2/view1_frontal.jpg
         parts = img.parts
         if len(parts) >= 3:
-            key = "/".join(parts[-3:])  # patient/study/file
-        else:
-            key = img.name
-        available_images[img.name] = img
-        if len(parts) >= 3:
-            available_images["/".join(parts[-3:])] = img
+            key3 = "/".join(parts[-3:])   # patient/study/file
+            available_3[key3] = img
+        if len(parts) >= 4:
+            patient_id = parts[-4]        # patientXXXXX
+            available_p.setdefault(patient_id, []).append(img)
 
-    print(f"    {len(available_images)} images indexees dans le sample Kaggle")
+    print(f"    {len(available_3)} images indexées (patient/study/file) dans le sample Kaggle")
 
     # Lecture du CSV de labels
     print(f"[>>] Lecture des labels : {labels_csv.name}...")
@@ -158,16 +164,46 @@ def build_cases_csv(
         "suspected_opacity": [],
         "uncertain": [],
     }
+    # Pour dédupliquer : on garde trace des chemins physiques déjà ajoutés
+    seen_img_paths: set[Path] = set()
+
     for row in all_rows:
         path_val = row.get("Path", "")
         if "lateral" in path_val.lower():
             continue
         label = map_chexpert_label(row)
-        # Vérifier si une image correspondante est disponible dans notre sample
-        filename = Path(path_val).name
-        if filename in available_images:
-            row["_img_path"] = available_images[filename]
+
+        # --- Matching robuste (2 niveaux) ---
+        # Le CSV amritpal333 : "CheXpert-v1.0-small/train/patientXXXXX/studyY/file.jpg"
+        # Le cache duong1589 : "CheXpert-v1.0/train/patientXXXXX/studyY/file.jpg"
+        # → 1) normaliser le préfixe et tenter le match exact patient/study/file
+        # → 2) si l'étude exacte est absente du cache, accepter n'importe quelle
+        #      étude du même patient (même type de vue, frontal uniquement).
+        norm_path = path_val.replace("CheXpert-v1.0-small/", "CheXpert-v1.0/")
+        parts_csv = Path(norm_path).parts
+        if len(parts_csv) < 4:
+            continue
+
+        patient_id = parts_csv[-4]        # patientXXXXX
+        filename   = parts_csv[-1]        # view1_frontal.jpg
+        key_3      = "/".join(parts_csv[-3:])
+
+        img_path = available_3.get(key_3)  # match exact étude
+
+        if img_path is None:
+            # Fallback : chercher n'importe quelle image du même patient + même nom de fichier
+            candidates = [
+                p for p in available_p.get(patient_id, [])
+                if p.name == filename
+            ]
+            if candidates:
+                img_path = candidates[0]
+
+        if img_path is not None and img_path not in seen_img_paths:
+            seen_img_paths.add(img_path)
+            row["_img_path"] = img_path
             buckets[label].append(row)
+
 
     print()
     for cls, items in buckets.items():
@@ -226,7 +262,7 @@ def build_cases_csv(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Télécharge et prépare un sous-ensemble CheXpert depuis Kaggle."
+        description="Télécharge et prépare un sous-ensemble CheXpert depuis Kaggle (ashery/chexpert)."
     )
     parser.add_argument(
         "--n-per-class", type=int, default=DEFAULT_N_PER_CLASS,
@@ -241,56 +277,70 @@ def main() -> None:
         help="Graine aléatoire pour la reproductibilité (défaut: 42).",
     )
     parser.add_argument(
-        "--skip-download", action="store_true",
-        help="Réutilise les fichiers déjà téléchargés (évite de re-télécharger).",
+        "--raw-dir", type=Path, default=None,
+        help=(
+            "Chemin vers le dataset CheXpert déjà téléchargé localement  "
+            "(dossier contenant train/ et train.csv). "
+            "Si renseigné, le téléchargement Kaggle est ignoré. "
+            "Exemple : data/chexpert_raw"
+        ),
     )
     args = parser.parse_args()
 
     out_dir = args.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
-    cache_dir = out_dir / "_cache"
 
     print("=" * 65)
     print("  CheXpert Subset Builder — Assistant Radiologue Virtuel EFREI")
     print("=" * 65)
+    print(f"  Source  : {DATASET}")
     print(f"  Objectif : {args.n_per_class} images x 3 classes = {args.n_per_class * 3} cas")
     print(f"  Sortie   : {out_dir}")
     print()
 
-    # Étape 1 : CSV des labels (~20 Mo)
-    csv_cache = cache_dir / "csv"
+    # Étape 1 : Déterminer l'emplacement du dataset brut
+    if args.raw_dir is not None:
+        # Utiliser un dataset déjà téléchargé localement (ex: data/chexpert_raw)
+        raw_dir = args.raw_dir.resolve()
+        print(f"[1/2] Dataset local utilisé : {raw_dir}")
+    else:
+        # Télécharger ashery/chexpert depuis Kaggle
+        cache_dir = out_dir / "_cache"
+        raw_dir = cache_dir / "ashery_chexpert"
+        if any(raw_dir.rglob("*.jpg")):
+            n_cached = len(list(raw_dir.rglob("*.jpg")))
+            print(f"[1/2] Dataset deja téléchargé — {n_cached} images en cache.")
+        else:
+            print(f"[1/2] Téléchargement depuis Kaggle ({DATASET}, ~11 Go)...")
+            print(f"      ⚠️  Assure-toi d'avoir accepté les conditions sur :")
+            print(f"          https://www.kaggle.com/datasets/{DATASET}")
+            kaggle_download(DATASET, raw_dir)
+
+    # Localiser train.csv et le dossier train/
     labels_csv_path = None
-
-    if not args.skip_download or not any(csv_cache.rglob("*.csv")):
-        print("[1/2] Telechargement du CSV de labels (amritpal333, ~20 Mo)...")
-        kaggle_download(DATASET_CSV, csv_cache)
-    else:
-        print("[1/2] CSV deja telecharge — utilisation du cache.")
-
-    # Trouver le CSV téléchargé
-    csv_candidates = list(csv_cache.rglob("*.csv"))
-    if not csv_candidates:
-        print("[ERR] Aucun CSV trouve apres telechargement.")
+    for candidate in [raw_dir / "train.csv", raw_dir / "CheXpert-v1.0" / "train.csv",
+                      raw_dir / "CheXpert-v1.0-small" / "train.csv"]:
+        if candidate.exists():
+            labels_csv_path = candidate
+            break
+    if labels_csv_path is None:
+        csv_found = list(raw_dir.rglob("train.csv"))
+        if csv_found:
+            labels_csv_path = csv_found[0]
+    if labels_csv_path is None:
+        print("[ERR] train.csv introuvable dans le dataset. Vérifie le contenu de raw_dir.")
         sys.exit(1)
-    labels_csv_path = csv_candidates[0]
-    print(f"      CSV : {labels_csv_path.name} ({labels_csv_path.stat().st_size // 1024} Ko)")
+    print(f"      Labels CSV : {labels_csv_path.relative_to(raw_dir) if raw_dir in labels_csv_path.parents else labels_csv_path.name}")
 
-    # Étape 2 : Images sample (~52 Mo)
-    img_cache = cache_dir / "images"
+    # Le dossier images = dossier parent de train.csv / train/
+    images_root = labels_csv_path.parent
 
-    if not args.skip_download or not any(img_cache.rglob("*.jpg")):
-        print("[2/2] Telechargement des images sample (duong1589, ~52 Mo)...")
-        kaggle_download(DATASET_IMAGES, img_cache)
-    else:
-        n_cached = len(list(img_cache.rglob("*.jpg")))
-        print(f"[2/2] Images deja telechargees — {n_cached} images en cache.")
-
-    # Étape 3 : Construire le subset équilibré
+    # Étape 2 : Construire le subset équilibré
     print()
-    print("[3/3] Construction du subset equilibre...")
+    print("[2/2] Construction du subset équilibré...")
     out_csv = build_cases_csv(
         labels_csv  = labels_csv_path,
-        images_root = img_cache,
+        images_root = images_root,
         out_dir     = out_dir,
         n_per_class = args.n_per_class,
         seed        = args.seed,
@@ -302,24 +352,24 @@ def main() -> None:
 
     print()
     print("=" * 65)
-    print(f"  [DONE] {n_total} cas selectionnes dans :")
+    print(f"  [DONE] {n_total} cas sélectionnés dans :")
     print(f"         {out_csv}")
     print()
-    print("  Lancer l'evaluation sur les vraies radios :")
+    print("  Si le dataset est déjà local (data/chexpert_raw) :")
+    print()
+    print("    .venv\\Scripts\\python.exe data/download_chexpert.py \\")
+    print(f"      --raw-dir data/chexpert_raw")
+    print()
+    print("  Lancer l'évaluation sur les vraies radios :")
     print()
     print("    .venv\\Scripts\\python.exe eval/run_evaluation.py \\")
     print("      --mode gemini-baseline \\")
     print(f"      --cases-csv {out_csv}")
     print()
-    print("  Ou comparer baseline vs improved :")
-    print()
-    print("    .venv\\Scripts\\python.exe eval/run_evaluation.py \\")
-    print("      --mode all-gemini \\")
-    print(f"      --cases-csv {out_csv}")
-    print()
     print("  RAPPEL LICENCE :")
-    print("  CheXpert — Stanford AIMI — recherche et education uniquement.")
+    print("  CheXpert — Stanford AIMI — recherche et éducation uniquement.")
     print("  Citation : Irvin et al. (2019), AAAI. DOI: 10.1609/aaai.v33i01.3301590")
+    print("  Dataset  : https://www.kaggle.com/datasets/ashery/chexpert")
     print("=" * 65)
 
 

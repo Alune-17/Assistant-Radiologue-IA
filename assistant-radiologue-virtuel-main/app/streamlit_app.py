@@ -101,6 +101,6 @@ if uploaded:
 
 else:
     st.info(
-        "💡 Utilisez les images synthétiques dans `data/sample_images/` pour tester le flux.\n\n"
+        "💡 Utilisez les images synthétiques dans `data/synthetic/images/` pour tester le flux.\n\n"
         "Exemple : `CXR_SYN_001_normal.png`, `CXR_SYN_002_suspected_opacity.png`, etc."
     )

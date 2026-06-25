@@ -31,7 +31,7 @@ def test_repository_student_contract_is_present() -> None:
         "docs/architecture.md",
         "docs/ethique_et_limites.md",
         "docs/evaluation_protocol.md",
-        "data/synthetic_cases.csv",
+        "data/synthetic/cases.csv",
         "src/inference.py",
         "src/guardrails.py",
         "api/main.py",
@@ -58,7 +58,7 @@ def test_repository_student_contract_is_present() -> None:
 
 
 def test_synthetic_dataset_contract_is_valid() -> None:
-    path = ROOT / "data" / "synthetic_cases.csv"
+    path = ROOT / "data" / "synthetic" / "cases.csv"
     required_columns = {"case_id", "image_path", "source", "label", "split", "quality", "notes"}
     allowed_labels = {"normal", "suspected_opacity", "uncertain"}
 
@@ -74,7 +74,7 @@ def test_synthetic_dataset_contract_is_valid() -> None:
 
 
 def test_prediction_schema_warning_and_guardrails() -> None:
-    image_path = ROOT / "data" / "sample_images" / "CXR_SYN_002_suspected_opacity.png"
+    image_path = ROOT / "data" / "synthetic" / "images" / "CXR_SYN_002_suspected_opacity.png"
     pred = apply_safety_guardrails(toy_predict(image_path, mode="improved"))
     valid, errors = validate_prediction(pred)
 
@@ -114,7 +114,7 @@ def test_metrics_and_api_health_contract() -> None:
 
 def test_api_predict_preserves_uploaded_case_signal() -> None:
     client = TestClient(app)
-    image_path = ROOT / "data" / "sample_images" / "CXR_SYN_002_suspected_opacity.png"
+    image_path = ROOT / "data" / "synthetic" / "images" / "CXR_SYN_002_suspected_opacity.png"
 
     with image_path.open("rb") as file:
         response = client.post(

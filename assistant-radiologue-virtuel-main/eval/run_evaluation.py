@@ -48,7 +48,7 @@ def run(mode: str, db_path: Path, cases_csv: Path | None = None) -> tuple[list[d
         Tuple (lignes de prédictions, dictionnaire de métriques).
     """
     if cases_csv is None:
-        cases_csv = ROOT / 'data' / 'synthetic_cases.csv'
+        cases_csv = ROOT / 'data' / 'synthetic' / 'cases.csv'
     cases = read_cases(cases_csv)
     predict_fn = INFERENCE_MAP[mode]
     rows = []
@@ -104,8 +104,8 @@ def main() -> None:
         '--cases-csv', type=Path, default=None,
         help=(
             "CSV de cas à évaluer. "
-            "Défaut : data/synthetic_cases.csv (images synthétiques). "
-            "Utiliser data/chexpert_subset/chexpert_cases.csv pour les vraies radios CheXpert."
+            "Défaut : data/synthetic/cases.csv (images synthétiques). "
+            "Utiliser data/chexpert_eval/cases.csv pour les vraies radios CheXpert."
         ),
     )
     args = parser.parse_args()

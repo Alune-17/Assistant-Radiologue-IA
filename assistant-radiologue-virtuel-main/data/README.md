@@ -1,114 +1,150 @@
-# Données — Assistant Radiologue Virtuel
+# Données — Assistant Radiologue Virtuel EFREI
 
-Ce projet utilise **deux datasets** avec des rôles distincts.
+Ce dossier contient **3 zones de données clairement séparées**, chacune avec un rôle distinct.
 
 ---
 
-## 1. Dataset synthétique (pipeline de tests) — `data/sample_images/`
+## Structure
 
-> **Rôle :** Valider l'architecture, les logs, les métriques et les smoke tests.  
-> **Ne pas utiliser pour évaluer la performance médicale.**
+```
+data/
+├── synthetic/                    ← images de test (pas des vraies radios)
+│   ├── images/                   ← 30 PNG générés programmatiquement
+│   └── cases.csv                 ← index des 30 cas de test
+│
+├── chexpert_raw/                 ← dataset CheXpert brut complet [❌ gitignored]
+│   ├── train/                    ← 50 594 patients, ~8 Go
+│   ├── valid/                    ← 200 patients, ~12 Mo
+│   └── valid.csv                 ← labels du valid set officiel Stanford
+│
+├── chexpert_eval/                ← sous-ensemble prêt pour l'évaluation [❌ gitignored]
+│   ├── images/                   ← radios sélectionnées (21 actuellement)
+│   ├── cases.csv                 ← index pour run_evaluation.py
+│   └── _cache/                   ← cache temporaire (ne pas modifier)
+│
+├── download_chexpert.py          ← script de préparation du subset
+└── README.md                     ← ce fichier
+```
+
+---
+
+## Zone 1 — `synthetic/` — Images de test
+
+> **Rôle :** Valider l'architecture, les logs, les métriques et les smoke tests CI/CD.
+> **⚠️ Ne pas utiliser pour évaluer les performances médicales du modèle.**
 
 | Propriété | Valeur |
 |-----------|--------|
 | Format | PNG synthétique (~27 Ko/image) |
-| Taille | 30 images (~800 Ko total) |
-| Classes | 10 normal, 10 suspected_opacity, 10 uncertain |
-| Source | Généré programmatiquement (gribouillis Python) |
-| Licence | Libre — usage interne uniquement |
-| Git | ✅ Commité (petit, utile pour le CI) |
+| Taille totale | 30 images (~800 Ko) |
+| Répartition | 10 normal · 10 suspected_opacity · 10 uncertain |
+| Génération | Programmatique (script Python — gribouillis colorés) |
+| Licence | Libre — usage interne projet EFREI |
+| Git | ✅ Commité (léger, utile pour le CI) |
 
 Ces images **ne ressemblent pas à de vraies radiographies**. Elles servent uniquement à s'assurer que le pipeline Python tourne de bout en bout.
 
+### Utilisation
+
+```python
+# Dans le code Python, accéder aux images synthétiques :
+from pathlib import Path
+ROOT = Path(__file__).resolve().parent.parent
+image = ROOT / "data" / "synthetic" / "images" / "CXR_SYN_002_suspected_opacity.png"
+```
+
+```bash
+# Lancer l'évaluation sur les images synthétiques (défaut) :
+.venv\Scripts\python.exe eval/run_evaluation.py
+# équivaut à :
+.venv\Scripts\python.exe eval/run_evaluation.py --cases-csv data/synthetic/cases.csv
+```
+
 ---
 
-## 2. Dataset CheXpert (évaluation réelle) — `data/chexpert_subset/`
+## Zone 2 — `chexpert_raw/` — Dataset CheXpert complet
 
-> **Rôle :** Évaluation réelle du modèle sur des vraies radiographies thoraciques.  
-> **Ce dossier n'est PAS commité dans Git** (voir `.gitignore`).
+> **Rôle :** Données sources brutes de référence. Utilisées par `download_chexpert.py`
+> pour construire le subset d'évaluation. Très volumineuses — ne pas commiter.
 
 | Propriété | Valeur |
 |-----------|--------|
-| Nom | CheXpert v1.0 Small |
-| Auteurs | Irvin et al. (2019), Stanford ML Group |
-| Source Kaggle | https://www.kaggle.com/datasets/willarevalo/chexpert-v10-small |
-| Source officielle | https://stanfordaimi.azurewebsites.net/datasets/8cbd9ed4-2eb9-4565-affc-111cf4f7ebe2 |
-| Licence | **Recherche et éducation uniquement** — non commercial |
-| Taille totale | ~11 Go (compressé) — 224 316 radiographies |
-| Subset utilisé | **30 images** (10 par classe) — sélection aléatoire seed=42 |
-| Git | ❌ Exclu du repo (trop volumineux, licence restrictive) |
+| Nom officiel | **CheXpert v1.0** (version Small) |
+| Auteurs | Irvin et al. (2019) — Stanford ML Group / Stanford AIMI |
+| Source Kaggle | https://www.kaggle.com/datasets/ashery/chexpert |
+| Source officielle Stanford | https://stanfordaimi.azurewebsites.net/datasets/8cbd9ed4-2eb9-4565-affc-111cf4f7ebe2 |
+| **Licence** | **Recherche et éducation uniquement — usage non commercial** |
+| Taille | ~8,1 Go (train) + ~12 Mo (valid) |
+| Contenu train | 50 594 patients · ~220 000 radiographies |
+| Contenu valid | 200 patients · 234 radiographies |
+| Format images | JPEG, résolution variable (≈ 320×390 px après resize) |
+| Git | ❌ Exclu du repo (`.gitignore`) |
+
+### ⚠️ Fiabilité et limites
+
+- **Labels auto-générés par NLP** sur des rapports radiologiques (aucune relecture manuelle systématique)
+- Taux d'incertitude élevé : ~35 % des labels sont `-1.0` (incertain)
+- Biais de population : adultes hospitalisés à Stanford — non représentatif de la population générale
+- Résolution réduite dans la version "Small" — certains détails fins peuvent être perdus
+
+### Comment re-télécharger
+
+1. Créer un compte Kaggle et accepter les conditions du dataset :
+   👉 https://www.kaggle.com/datasets/ashery/chexpert
+2. Générer un token API : https://www.kaggle.com/settings → **"Create New Token"**
+3. Placer `kaggle.json` dans `C:\Users\<vous>\.kaggle\kaggle.json`
+
+```bash
+# Préparer le subset d'évaluation (utilise chexpert_raw/ si déjà présent)
+.venv\Scripts\python.exe data/download_chexpert.py --raw-dir data/chexpert_raw
+
+# Ou télécharger depuis Kaggle (si chexpert_raw/ absent) :
+.venv\Scripts\python.exe data/download_chexpert.py
+# → télécharge ashery/chexpert (~11 Go) dans chexpert_eval/_cache/
+```
+
+---
+
+## Zone 3 — `chexpert_eval/` — Subset d'évaluation
+
+> **Rôle :** Sous-ensemble prêt à l'emploi pour `run_evaluation.py`.
+> Construit automatiquement par `download_chexpert.py` depuis `chexpert_raw/`.
+
+| Propriété | Valeur |
+|-----------|--------|
+| Source | Extrait de `chexpert_raw/train/` (voir Zone 2) |
+| Taille actuelle | ~21 images (~1 Mo) |
+| Répartition cible | 10 normal · 10 suspected_opacity · 10 uncertain |
+| Sélection | Aléatoire avec `seed=42` (reproductible) |
+| Licence | Identique à CheXpert — recherche/éducation uniquement |
+| Git | ❌ Exclu du repo (`.gitignore`) |
 
 ### Mapping des labels CheXpert → nos 3 classes
 
 | Condition CheXpert | Classe projet |
-|-------------------|---------------|
+|---|---|
 | `No Finding = 1.0` | `normal` |
 | `Consolidation = 1.0` OU `Pleural Effusion = 1.0` OU `Edema = 1.0` OU `Pneumonia = 1.0` | `suspected_opacity` |
-| Label `-1.0` (incertain) sur les colonnes d'opacité | `uncertain` |
-| Autre / non classifiable | `uncertain` |
+| Colonne opacité `= -1.0` (incertain, aucune à 1.0) | `uncertain` |
+| Autre / non classifiable | `uncertain` (garde-fou) |
 
-### Comment télécharger le subset CheXpert
+### Limitation connue
 
-#### Prérequis
+Le dataset source (`ashery/chexpert`) contient très peu de patients avec `No Finding = 1.0`
+dans le train set → la classe `normal` est souvent sous-représentée dans le subset.
 
-1. Créer un compte Kaggle : https://www.kaggle.com
-2. Accepter les conditions du dataset sur la page Kaggle
-3. Générer un token API : https://www.kaggle.com/settings → **"Create New Token"**
-4. Placer `kaggle.json` dans `C:\Users\<vous>\.kaggle\kaggle.json`
-5. Installer le package kaggle :
+### Lancer l'évaluation
 
 ```bash
-.venv\Scripts\pip install kaggle
-```
-
-#### Téléchargement (30 cas, ~50 Mo d'images)
-
-```bash
-# Télécharge depuis Kaggle et prépare 30 images (10 par classe)
-.venv\Scripts\python.exe data/download_chexpert.py
-
-# Options avancées
-.venv\Scripts\python.exe data/download_chexpert.py --n-per-class 15 --seed 42
-# → 45 cas (15 par classe)
-```
-
-#### Si CheXpert est déjà téléchargé localement
-
-```bash
-.venv\Scripts\python.exe data/download_chexpert.py \
-  --chexpert-dir "C:\chemin\vers\CheXpert-v1.0-small" \
-  --n-per-class 10
-```
-
-#### Lancer l'évaluation sur les images réelles
-
-```bash
+# Évaluation sur les radios réelles :
 .venv\Scripts\python.exe eval/run_evaluation.py \
   --mode gemini-baseline \
-  --cases-csv data/chexpert_subset/chexpert_cases.csv
+  --cases-csv data/chexpert_eval/cases.csv
 ```
 
 ---
 
-## 3. Structure attendue après téléchargement
-
-```
-data/
-├── sample_images/           ✅ commité — 30 images synthétiques (tests)
-├── synthetic_cases.csv      ✅ commité — 30 cas synthétiques
-├── download_chexpert.py     ✅ commité — script de téléchargement
-├── README.md                ✅ commité — cette documentation
-└── chexpert_subset/         ❌ non commité (.gitignore)
-    ├── chexpert_cases.csv   ← généré par download_chexpert.py
-    └── images/
-        ├── CXR_CHEX_001_normal.jpg
-        ├── CXR_CHEX_002_suspected_opacity.jpg
-        └── ...
-```
-
----
-
-## 4. Références et citations
+## Référence et citation obligatoire
 
 ```
 Irvin, J., Rajpurkar, P., Ko, M., Yu, Y., Ciosi, S., Chute, C., ... & Ng, A. Y. (2019).
@@ -117,5 +153,6 @@ Proceedings of the AAAI Conference on Artificial Intelligence, 33(01), 590-597.
 https://doi.org/10.1609/aaai.v33i01.3301590
 ```
 
-> ⚠️ **Rappel éthique** : CheXpert contient des radiographies de patients réels dé-identifiées.  
-> Usage strictement limité à la recherche et l'éducation. Ne jamais utiliser pour le diagnostic.
+> ⚠️ **Rappel éthique** : CheXpert contient des radiographies de patients réels dé-identifiées.
+> Usage **strictement limité** à la recherche et l'éducation. Ne jamais utiliser pour le diagnostic.
+> Ne jamais redistribuer les images.
