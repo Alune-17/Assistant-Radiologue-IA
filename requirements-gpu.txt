@@ -1,0 +1,18 @@
+# Dépendances optionnelles pour fine-tuning (Phase COULD)
+# Nécessite un GPU — ne pas installer si vous faites uniquement de l'inférence API
+#
+# Installation : pip install -r requirements-gpu.txt
+
+-r requirements.txt
+
+# Machine Learning
+scikit-learn>=1.5
+opencv-python>=4.10
+
+# Imagerie médicale
+pydicom>=2.4
+
+# Fine-tuning LoRA / QLoRA
+transformers>=4.56
+accelerate>=0.34
+torch

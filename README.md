@@ -1,154 +1,171 @@
 # Assistant radiologue virtuel responsable
 
-> **Auteur :** Badr Tajini  
-> **Solution Delivery - Filière Data**  
-> **École :** EFREI  
-> **Année académique :** 2025-2026
+> **Prototype pédagogique** — Non destiné au diagnostic. Validation par un professionnel qualifié requise.
 
-## Contexte
-
-Prototype pédagogique d'IA médicale multimodale pour apprendre à construire une chaîne **prudente, traçable et évaluée** autour d'une radiographie thoracique frontale.
+Projet EFREI Solution Delivery — Filière Data (2025-2026).  
+Prototype d'IA médicale multimodale pour l'analyse **prudente, traçable et évaluée** de radiographies thoraciques frontales.
 
 ---
 
->  **Position non clinique.** Ce dépôt n'est pas un dispositif médical. Il ne doit jamais être utilisé pour diagnostiquer, trier ou orienter un patient. Toute sortie doit rester un résultat expérimental, vérifié par un professionnel qualifié.
+## Démarrage rapide
 
----
+### 1. Installation
 
-## Contrat du projet
-
-| Élément | Cadrage |
-|---|---|
-| Entrée | Une radiographie thoracique frontale |
-| Sorties | `normal`, `suspected_opacity`, `uncertain` |
-| Preuve minimale | JSON valide, warning, logs, métriques, cas d'erreur |
-| Données | Synthétiques ou publiques, autorisées et dé-identifiées |
-| Finalité | Prototype éducatif de data/IA, pas aide au diagnostic réelle |
-
-Le bon rendu ne cherche pas à impressionner par un modèle spectaculaire. Il démontre une méthode : périmètre limité, baseline reproductible, garde-fous, évaluation, analyse d'erreurs et limites explicites.
-
-## Prérequis
-
-Pour commencer à travailler sur ce projet à partir de zéro, vous aurez besoin de :
-1. **Python 3.10+** installé sur votre machine.
-2. **Clé API Groq (Gratuite)** : Utilisée pour exécuter le modèle de vision (Llama 4 Scout). Obtenez-la sur [console.groq.com](https://console.groq.com/keys).
-3. **Clé API Kaggle (Gratuite)** : Nécessaire pour télécharger les vraies radios du dataset CheXpert. Obtenez-la sur [kaggle.com](https://www.kaggle.com/settings) (créez un token API `kaggle.json`).
-
-## Démarrage rapide étape par étape
-
-### 1. Installation de l'environnement
 ```bash
 python -m venv .venv
-# Sur Windows :
+# Windows :
 .venv\Scripts\activate
-# Sur Mac/Linux :
+# Mac/Linux :
 source .venv/bin/activate
 
 pip install -r requirements.txt
 ```
 
-### 2. Configuration des clés API
-Dupliquez le fichier `.env.example` pour créer un fichier `.env` à la racine du projet :
+### 2. Configuration de la clé API
+
 ```bash
 cp .env.example .env
+# Éditez .env et collez votre clé API Groq (gratuite : https://console.groq.com/keys)
 ```
-Ouvrez le fichier `.env` et collez votre clé API Groq à l'intérieur. **Ne commitez jamais le fichier `.env` sur Git !**
 
-### 3. Téléchargement des données réelles (CheXpert)
-Assurez-vous d'avoir configuré vos credentials Kaggle (voir `data/README.md`), puis lancez le script :
-```bash
-python data/download_chexpert.py
-```
-*Cela téléchargera uniquement un sous-ensemble pertinent (30 cas, ~50 Mo) sans polluer votre disque dur avec les 11 Go complets.*
+> **Ne pas commit le fichier `.env` sur Git**
 
-### 4. Lancement de l'interface visuelle (Streamlit)
-Pour tester l'assistant radiologue dans votre navigateur avec vos propres images ou celles téléchargées :
+### 3. Lancement de l'interface (Streamlit)
+
 ```bash
 streamlit run app/streamlit_app.py
 ```
 
-### 5. Évaluation du modèle
-Pour lancer une évaluation sur les 30 radios téléchargées et générer des métriques complètes :
+### 4. Évaluation sur les images synthétiques
+
 ```bash
-python eval/run_evaluation.py --mode groq-baseline --cases-csv data/chexpert_subset/chexpert_cases.csv
+python eval/run_evaluation.py --mode toy
 ```
 
-## Smoke test du dépôt
+### 5. Évaluation sur les vraies radios (CheXpert)
 
-Avant une soutenance, un push ou une livraison, lancer le contrôle court :
+```bash
+# Télécharger le sous-ensemble CheXpert (voir data/README.md pour les prérequis Kaggle)
+python data/download_chexpert.py
+
+# Lancer l'évaluation avec l'API Groq
+python eval/run_evaluation.py --mode groq-baseline --cases-csv data/chexpert_eval/cases.csv
+```
+
+---
+
+## Organisation du dépôt
+
+```text
+Assistant-Radiologue-IA/
+├── README.md                       ← Ce fichier
+├── .env.example                    ← Template de configuration (clé API Groq)
+├── requirements.txt                ← Dépendances minimales
+├── requirements-test.txt           ← Dépendances pour les tests
+├── requirements-gpu.txt            ← Dépendances optionnelles (fine-tuning, GPU)
+│
+├── src/                            ← Code source principal
+│   ├── inference.py                    Inférence toy + API Groq (Llama 4 Scout)
+│   ├── guardrails.py                   Validation JSON, warning, fallback uncertain
+│   ├── preprocessing.py                Qualité image (luminosité, contraste, résolution)
+│   ├── metrics.py                      Accuracy, macro-F1, sensibilité, spécificité
+│   └── database.py                     Connecteur SQLite
+│
+├── api/                            ← API REST
+│   └── main.py                         FastAPI : GET / + POST /predict
+│
+├── app/                            ← Interfaces web
+│   ├── streamlit_app.py                Interface principale (4 modes d'analyse)
+│   └── gradio_app.py                   Interface alternative (mode toy)
+│
+├── eval/                           ← Évaluation et registre d'erreurs
+│   ├── run_evaluation.py               Script d'évaluation batch
+│   └── error_register_template.csv     Template du registre d'erreurs
+│
+├── data/                           ← Données
+│   ├── synthetic/                      30 images synthétiques + cases.csv (CI/CD)
+│   ├── download_chexpert.py            Script de téléchargement CheXpert via Kaggle
+│   └── README.md                       Documentation des datasets et licences
+│
+├── prompts/                        ← Prompts système
+│   ├── baseline_prompt.txt             Prompt anglais minimaliste
+│   ├── improved_prompt.txt             Prompt anglais avec garde-fous renforcés
+│   ├── french_prompt.txt               Prompt français
+│   └── json_schema.md                  Spécification du schéma JSON de sortie
+│
+├── docs/                           ← Documentation
+│   ├── appel_offre.pdf                 Appel d'offre original (PDF du professeur)
+│   ├── architecture.md                 Architecture et pipeline du prototype
+│   ├── ethique_et_limites.md           Guide éthique et garde-fous
+│   ├── evaluation_protocol.md          Protocole d'évaluation et taxonomie d'erreurs
+│   └── rapport_evaluation.md           Résultats Llama 4 Scout sur CheXpert
+│
+├── tests/                          ← Tests automatisés
+│   └── test_repository_smoke.py        8 smoke tests (structure, schéma, guardrails, API)
+│
+├── notebooks/                      ← Notebooks pédagogiques (squelettes)
+│   ├── 01_baseline_vlm.ipynb
+│   ├── 02_prompt_comparison.ipynb
+│   └── 03_optional_finetuning_lora.ipynb
+│
+├── finetuning/                     ← Stubs fine-tuning (Phase COULD)
+│   ├── gemma4_unsloth_lora_stub.py
+│   └── medgemma_peft_qlora_stub.py
+│
+└── sql/                            ← Schéma de base de données
+    └── schema.sql                      4 tables : cases, prompts, runs, evaluations
+```
+
+---
+
+## Contrat du projet
+
+| Élément | Valeur |
+|---|---|
+| **Entrée** | Une radiographie thoracique frontale (PNG, JPG, JPEG, BMP) |
+| **Sorties** | `normal`, `suspected_opacity`, `uncertain` |
+| **Format** | JSON structuré avec confiance, observations, justification, limites et warning |
+| **Données** | Synthétiques ou publiques, autorisées et dé-identifiées |
+| **Finalité** | Prototype éducatif — pas d'aide au diagnostic réelle |
+
+---
+
+## API
+
+```bash
+# Lancer le serveur
+uvicorn api.main:app --reload
+
+# Tester une prédiction
+curl -X POST "http://127.0.0.1:8000/predict" -F "file=@data/synthetic/images/CXR_SYN_002_suspected_opacity.png"
+```
+
+Modèles disponibles via `?model=` : `toy` (défaut), `groq-baseline`, `groq-improved`.
+
+---
+
+## Smoke tests
 
 ```bash
 pip install -r requirements-test.txt
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest -q
-python -m compileall -q src api app eval finetuning tests
-python eval/run_evaluation.py --mode toy \
-  --out-dir /tmp/assistant-radio-eval \
-  --db-path /tmp/assistant-radio-evidence.sqlite
 ```
 
-Ce smoke test vérifie la structure du dépôt, le contrat du dataset synthétique, le schéma de sortie, les garde-fous, l'API de démonstration, la compilation Python et l'évaluation jouet.
+Vérifie : structure du dépôt, contrat dataset, schéma JSON, guardrails, compilation Python, API, évaluation.
 
-## API de démonstration
-
-```bash
-uvicorn api.main:app --reload
-```
-
-Exemple :
-
-```bash
-curl -X POST "http://127.0.0.1:8000/predict" \
-  -F "file=@data/sample_images/CXR_SYN_002_suspected_opacity.png"
-```
-
-La réponse doit contenir une classe, une confiance, des observations visuelles, une justification, des limites et l'avertissement non clinique.
-
-## Organisation
-
-```text
-assistant-radiologue-virtuel/
-├── README.md
-├── docs/          # appel d'offre, architecture, éthique, évaluation
-├── data/          # cas synthétiques et images jouet
-├── prompts/       # prompt baseline, prompt amélioré, schéma JSON
-├── src/           # inférence jouet, garde-fous, métriques, SQLite
-├── api/           # FastAPI
-├── app/           # Streamlit / Gradio
-├── eval/          # évaluation, sorties CSV/JSON, registre d'erreurs
-├── tests/         # smoke tests et contrat minimal
-├── notebooks/     # notebooks de démarrage
-└── finetuning/    # stubs expérimentaux, non obligatoires
-```
+---
 
 ## Livrables attendus
 
 | Niveau | Attendu |
 |---|---|
 | **MUST** | Baseline reproductible, sortie JSON valide, warning obligatoire, logs, métriques, mini-rapport |
-| **SHOULD** | Prompt amélioré, règle d'incertitude, comparaison baseline/amélioration, analyse d'erreurs |
+| **SHOULD** | Prompt amélioré, comparaison baseline/amélioration, dashboard, registre d'erreurs |
 | **COULD** | LoRA expérimental, MedGemma/PEFT, localisation visuelle, ablations de prompts |
 
-## Références techniques
+---
 
-Les pistes avancées doivent rester expérimentales, traçables et justifiées. L'architecture repose actuellement sur l'API **Groq** avec le modèle **Llama 4 Scout** (rapide et gratuit), mais peut être étendue à d'autres solutions.
+## Licence
 
-| Ressource | Usage possible | Référence à citer |
-|---|---|---|
-| Llama 4 Scout / Groq | Inférence Vision multimodale (Baseline actuelle) | [Groq API](https://console.groq.com/docs/models) |
-| Unsloth - Llama Vision | Fine-tuning LoRA expérimental | [Unsloth AI](https://unsloth.ai/) |
-| MIMIC-CXR / MIMIC-CXR-JPG | Jeu de données de radiographies thoraciques, accès contrôlé et non redistribuable | [MIMIC-CXR](https://physionet.org/content/mimic-cxr/2.1.0/), [MIMIC-CXR-JPG](https://physionet.org/content/mimic-cxr-jpg/2.1.0/) |
-| CheXpert | Jeu de données public de radiographies thoraciques avec rapports associés | [Stanford AIMI - CheXpert](https://aimi.stanford.edu/datasets/chexpert-chest-x-rays) |
-
-## Points de vigilance
-
-- Ne pas inventer d'information clinique absente de l'image.
-- Ne pas supprimer la classe `uncertain`; elle est un garde-fou, pas un échec.
-- Ne pas afficher uniquement des réussites en soutenance.
-- Ne jamais commiter de données patient réelles, identifiantes ou ambiguës.
-- Ne pas présenter le prototype comme validé médicalement.
-
-## Licence et sources externes
-
-Le code pédagogique du dépôt est publié sous licence MIT. **Les datasets externes, modèles et bibliothèques utilisés conservent leurs licences propres** : les étudiants doivent vérifier et documenter les droits d'usage avant toute expérimentation.
-
-Exigence minimale : indiquer dans le rapport la source, la version, la licence ou les conditions d'accès, les restrictions de redistribution, les traitements d'anonymisation et les limites d'interprétation. Aucun fichier patient réel, même pseudonymisé, ne doit être ajouté au dépôt sans autorisation explicite et traçable.
+Le code pédagogique est publié sous licence MIT.  
+**Les datasets externes et modèles conservent leurs licences propres** — voir `data/README.md` pour les détails.

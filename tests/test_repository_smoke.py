@@ -27,7 +27,7 @@ def test_repository_student_contract_is_present() -> None:
         "requirements.txt",
         "requirements-test.txt",
         ".github/workflows/ci.yml",
-        "docs/appel_offre.md",
+        "docs/appel_offre.pdf",
         "docs/architecture.md",
         "docs/ethique_et_limites.md",
         "docs/evaluation_protocol.md",

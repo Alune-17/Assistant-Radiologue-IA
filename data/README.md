@@ -89,18 +89,71 @@ image = ROOT / "data" / "synthetic" / "images" / "CXR_SYN_002_suspected_opacity.
 
 ### Comment re-télécharger
 
-1. Créer un compte Kaggle et accepter les conditions du dataset :
-   👉 https://www.kaggle.com/datasets/ashery/chexpert
-2. Générer un token API : https://www.kaggle.com/settings → **"Create New Token"**
-3. Placer `kaggle.json` dans `C:\Users\<vous>\.kaggle\kaggle.json`
+#### Étape 1 — Créer un compte Kaggle (si pas déjà fait)
+
+Rendez-vous sur https://www.kaggle.com/ et créez un compte (gratuit).
+
+#### Étape 2 — Générer un token API Kaggle
+
+1. Connectez-vous sur https://www.kaggle.com/settings
+2. Descendez jusqu'à la section **« API »**
+3. Cliquez sur **« Create New Token »**
+4. Un fichier `kaggle.json` sera automatiquement téléchargé — il contient votre clé API
+
+Le fichier téléchargé ressemble à ceci :
+```json
+{"username":"votre_pseudo_kaggle","key":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}
+```
+
+#### Étape 3 — Installer le fichier `kaggle.json` au bon endroit
+
+Le SDK Kaggle cherche le fichier dans `~/.kaggle/kaggle.json`. Voici les commandes selon votre OS :
+
+**Windows (PowerShell) :**
+```powershell
+# Créer le dossier .kaggle dans votre profil utilisateur
+mkdir "$env:USERPROFILE\.kaggle" -Force
+
+# Copier le fichier téléchargé (adaptez le chemin si besoin)
+Copy-Item "$env:USERPROFILE\Downloads\kaggle.json" "$env:USERPROFILE\.kaggle\kaggle.json"
+
+# Vérifier que le fichier est bien en place
+Get-Content "$env:USERPROFILE\.kaggle\kaggle.json"
+```
+
+**Mac / Linux :**
+```bash
+# Créer le dossier .kaggle
+mkdir -p ~/.kaggle
+
+# Copier le fichier téléchargé
+cp ~/Downloads/kaggle.json ~/.kaggle/kaggle.json
+
+# Restreindre les permissions (obligatoire sur Linux/Mac)
+chmod 600 ~/.kaggle/kaggle.json
+
+# Vérifier
+cat ~/.kaggle/kaggle.json
+```
+
+#### Étape 4 — Accepter les conditions du dataset CheXpert
+
+Rendez-vous sur la page du dataset et cliquez sur **« Download »** une première fois pour accepter les conditions d'utilisation :  
+👉 https://www.kaggle.com/datasets/ashery/chexpert
+
+> ⚠️ Si vous ne faites pas cette étape, le script de téléchargement retournera une erreur `403 Forbidden`.
+
+#### Étape 5 — Lancer le téléchargement
 
 ```bash
-# Préparer le subset d'évaluation (utilise chexpert_raw/ si déjà présent)
-.venv\Scripts\python.exe data/download_chexpert.py --raw-dir data/chexpert_raw
+# Installer le package officiel kaggle (nécessaire pour le téléchargement)
+pip install kaggle
 
-# Ou télécharger depuis Kaggle (si chexpert_raw/ absent) :
-.venv\Scripts\python.exe data/download_chexpert.py
-# → télécharge ashery/chexpert (~11 Go) dans chexpert_eval/_cache/
+# Télécharger et préparer le subset d'évaluation (~52 Mo)
+python data/download_chexpert.py
+
+# OU, si vous avez déjà le dataset CheXpert brut localement :
+python data/download_chexpert.py --raw-dir data/chexpert_raw
 ```
 
 ---

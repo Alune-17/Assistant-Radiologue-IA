@@ -1,5 +1,6 @@
-fastapi>=0.115
-httpx>=0.27
-python-multipart>=0.0.9
-pillow>=10.4
+# Dépendances de test — inclut automatiquement les dépendances du projet
+-r requirements.txt
+
+# Packages spécifiques aux tests
 pytest>=8.0
+httpx>=0.27

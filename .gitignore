@@ -23,3 +23,6 @@ assets/
 
 # Local duplicate; the shareable PDF lives in docs/appel_offre.pdf
 /appel_offre.pdf
+
+# Document de suivi personnel — ne pas livrer
+cahier_des_charges.md

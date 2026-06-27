@@ -202,7 +202,7 @@ def _groq_call(
 
 def groq_predict(image_path: str | Path) -> dict[str, Any]:
     """Prédiction via l'API Groq avec le prompt générique."""
-    return _groq_call(image_path, "gemini_prompt.txt", "vlm_prompt_v1")
+    return _groq_call(image_path, "french_prompt.txt", "vlm_prompt_v1")
 
 
 def groq_predict_baseline(image_path: str | Path) -> dict[str, Any]:
