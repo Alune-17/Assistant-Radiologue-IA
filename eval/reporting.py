@@ -106,6 +106,40 @@ def summarize_quality_rows(prediction_rows: list[dict[str, str]]) -> list[dict[s
 
 
 
+def summarize_calibration_rows(rows: list[dict[str, str]]) -> list[dict[str, Any]]:
+    """Retourne les lignes globales de calibration pour le rapport Markdown."""
+    overall_rows = [row for row in rows if row.get("row_type") == "overall"]
+    return [
+        {
+            "mode": row.get("mode", ""),
+            "n": row.get("n", ""),
+            "avg_confidence": row.get("avg_confidence", ""),
+            "accuracy": row.get("accuracy", ""),
+            "calibration_gap": row.get("calibration_gap", ""),
+            "ece": row.get("ece", ""),
+            "reliability_flag": row.get("reliability_flag", ""),
+        }
+        for row in overall_rows
+    ]
+
+
+def calibration_bin_rows(rows: list[dict[str, str]], limit: int = 12) -> list[dict[str, Any]]:
+    """Sélectionne les intervalles non vides les plus utiles à afficher."""
+    bin_rows = [row for row in rows if row.get("row_type") == "bin" and row.get("n") not in {"", "0", 0}]
+    return [
+        {
+            "mode": row.get("mode", ""),
+            "confidence_bin": row.get("confidence_bin", ""),
+            "n": row.get("n", ""),
+            "avg_confidence": row.get("avg_confidence", ""),
+            "accuracy": row.get("accuracy", ""),
+            "calibration_gap": row.get("calibration_gap", ""),
+            "reliability_flag": row.get("reliability_flag", ""),
+        }
+        for row in bin_rows[:limit]
+    ]
+
+
 def summarize_threshold_sweep(rows: list[dict[str, str]]) -> list[dict[str, Any]]:
     """Sélectionne quelques seuils lisibles pour le rapport Markdown."""
     if not rows:
@@ -143,6 +177,7 @@ def generate_evaluation_report(out_dir: Path, report_path: Path) -> Path:
     error_files = sorted(out_dir.glob("*_error_register.csv"))
     case_review_rows = read_csv(out_dir / "case_review_template.csv")
     threshold_rows = read_csv(out_dir / "threshold_sweep.csv")
+    calibration_rows = read_csv(out_dir / "calibration_report.csv")
 
     lines: list[str] = []
     lines.append("# Rapport d'évaluation automatique")
@@ -156,7 +191,8 @@ def generate_evaluation_report(out_dir: Path, report_path: Path) -> Path:
     )
     lines.append("")
 
-    lines.append("## 1. Synthèse des métriques")
+    section = 1
+    lines.append(f"## {section}. Synthèse des métriques")
     lines.append("")
     lines.append(
         markdown_table(
@@ -175,9 +211,10 @@ def generate_evaluation_report(out_dir: Path, report_path: Path) -> Path:
             ],
         )
     )
+    section += 1
 
     if threshold_rows:
-        lines.append("## 2. Analyse des seuils d'incertitude")
+        lines.append(f"## {section}. Analyse des seuils d'incertitude")
         lines.append("")
         lines.append(
             "Cette section post-traite les prédictions avec plusieurs seuils de confiance. "
@@ -201,10 +238,37 @@ def generate_evaluation_report(out_dir: Path, report_path: Path) -> Path:
             )
         )
         lines.append("")
+        section += 1
+
+    if calibration_rows:
+        lines.append(f"## {section}. Calibration des scores de confiance")
+        lines.append("")
+        lines.append(
+            "La calibration compare la confiance moyenne annoncée et le taux réel de bonnes prédictions. "
+            "Un écart positif signale une tendance à la surconfiance ; un écart négatif signale une sous-confiance. "
+            "L'ECE est une synthèse pondérée des écarts par intervalles de confiance."
+        )
+        lines.append("")
+        lines.append(
+            markdown_table(
+                summarize_calibration_rows(calibration_rows),
+                ["mode", "n", "avg_confidence", "accuracy", "calibration_gap", "ece", "reliability_flag"],
+            )
+        )
+        lines.append("")
+        lines.append("### Intervalles de confiance non vides")
+        lines.append("")
+        lines.append(
+            markdown_table(
+                calibration_bin_rows(calibration_rows),
+                ["mode", "confidence_bin", "n", "avg_confidence", "accuracy", "calibration_gap", "reliability_flag"],
+            )
+        )
+        lines.append("")
+        section += 1
 
     if prediction_files:
-        section_number = "3" if threshold_rows else "2"
-        lines.append(f"## {section_number}. Contrôle qualité image")
+        lines.append(f"## {section}. Contrôle qualité image")
         lines.append("")
         lines.append(
             "Cette section documente le prétraitement minimal : résolution, contraste, "
@@ -218,9 +282,9 @@ def generate_evaluation_report(out_dir: Path, report_path: Path) -> Path:
             lines.append("")
             lines.append(markdown_table(summarize_quality_rows(rows), ["type", "value", "count"]))
             lines.append("")
+        section += 1
 
-        matrix_section = "4" if threshold_rows else "3"
-        lines.append(f"## {matrix_section}. Matrices de confusion")
+        lines.append(f"## {section}. Matrices de confusion")
         lines.append("")
         for path in prediction_files:
             rows = read_csv(path)
@@ -233,10 +297,10 @@ def generate_evaluation_report(out_dir: Path, report_path: Path) -> Path:
                 )
             )
             lines.append("")
+        section += 1
 
     if error_files:
-        error_section = "5" if threshold_rows else "4"
-        lines.append(f"## {error_section}. Registres d'erreurs")
+        lines.append(f"## {section}. Registres d'erreurs")
         lines.append("")
         for path in error_files:
             rows = read_csv(path)
@@ -253,10 +317,10 @@ def generate_evaluation_report(out_dir: Path, report_path: Path) -> Path:
                 )
             )
             lines.append("")
+        section += 1
 
     if case_review_rows:
-        review_section = "6" if threshold_rows else "5"
-        lines.append(f"## {review_section}. Template des 20 à 30 cas commentés")
+        lines.append(f"## {section}. Template des 20 à 30 cas commentés")
         lines.append("")
         lines.append(
             "Le fichier `case_review_template.csv` pré-sélectionne les cas à commenter "
@@ -279,9 +343,9 @@ def generate_evaluation_report(out_dir: Path, report_path: Path) -> Path:
             )
         )
         lines.append("")
+        section += 1
 
-    responsible_section = "7" if threshold_rows else "6"
-    lines.append(f"## {responsible_section}. Lecture responsable")
+    lines.append(f"## {section}. Lecture responsable")
     lines.append("")
     lines.append(
         "Ce rapport sert à défendre la chaîne d'ingénierie : JSON valide, logs, métriques, "

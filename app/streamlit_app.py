@@ -181,6 +181,37 @@ def render_dashboard_tab() -> None:
             if chart_cols:
                 st.line_chart(mode_df[chart_cols])
 
+    calibration_path = OUTPUT_DIR / "calibration_report.csv"
+    if calibration_path.exists():
+        st.markdown("### Calibration des scores de confiance")
+        calibration_df = pd.read_csv(calibration_path)
+        st.caption(
+            "Cette analyse compare la confiance moyenne annoncée avec le taux réel de prédictions correctes. "
+            "Le flag `overconfident` signale une confiance supérieure à l'accuracy observée."
+        )
+        overall_df = calibration_df[calibration_df["row_type"] == "overall"] if "row_type" in calibration_df.columns else calibration_df
+        st.dataframe(overall_df, use_container_width=True)
+        if {"row_type", "mode", "confidence_bin", "avg_confidence", "accuracy"} <= set(calibration_df.columns):
+            selected_calibration_mode = st.selectbox(
+                "Mode pour la calibration",
+                sorted(calibration_df["mode"].unique()),
+                key="calibration_mode",
+            )
+            bin_df = calibration_df[
+                (calibration_df["mode"] == selected_calibration_mode)
+                & (calibration_df["row_type"] == "bin")
+                & (calibration_df["n"].astype(str) != "0")
+            ].set_index("confidence_bin")
+            chart_cols = [col for col in ["avg_confidence", "accuracy"] if col in bin_df.columns]
+            if chart_cols and not bin_df.empty:
+                st.line_chart(bin_df[chart_cols])
+        st.download_button(
+            "Télécharger le rapport de calibration",
+            data=calibration_path.read_text(encoding="utf-8"),
+            file_name="calibration_report.csv",
+            mime="text/csv",
+        )
+
     error_files = sorted(OUTPUT_DIR.glob("*_error_register.csv"))
     if error_files:
         st.markdown("### Registre d'erreurs")

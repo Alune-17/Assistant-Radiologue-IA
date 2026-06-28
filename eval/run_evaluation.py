@@ -16,6 +16,7 @@ from src.database import insert_run, insert_evaluation, init_db
 from eval.reporting import generate_evaluation_report
 from eval.case_review import build_case_review_template
 from eval.threshold_sweep import generate_threshold_sweep
+from eval.calibration import generate_calibration_report
 
 # Mapping mode → fonction d'inférence
 INFERENCE_MAP = {
@@ -213,12 +214,15 @@ def main() -> None:
 
     write_csv(out_dir / "before_after_summary.csv", summary)
     threshold_sweep_path = generate_threshold_sweep(out_dir)
+    calibration_path = generate_calibration_report(out_dir)
     case_review_path = build_case_review_template(out_dir, out_dir / "case_review_template.csv", limit=30)
     report_path = generate_evaluation_report(out_dir, out_dir / "evaluation_report.md")
     print(f"\n[DONE] Resultats ecrits dans {out_dir}", file=sys.stderr)
     print(f"[DONE] Rapport Markdown : {report_path}", file=sys.stderr)
     if threshold_sweep_path is not None:
         print(f"[DONE] Analyse des seuils : {threshold_sweep_path}", file=sys.stderr)
+    if calibration_path is not None:
+        print(f"[DONE] Calibration des confiances : {calibration_path}", file=sys.stderr)
     if case_review_path is not None:
         print(f"[DONE] Template revue de cas : {case_review_path}", file=sys.stderr)
     print(json.dumps(summary, indent=2, ensure_ascii=False))

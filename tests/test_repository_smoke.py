@@ -43,6 +43,7 @@ def test_repository_student_contract_is_present() -> None:
         "eval/case_review.py",
         "eval/generate_case_review.py",
         "eval/threshold_sweep.py",
+        "eval/calibration.py",
         "prompts/json_schema.md",
     ]
     forbidden_paths = [
@@ -197,6 +198,7 @@ def test_evaluation_command_runs_and_preserves_warning_contract(tmp_path: Path) 
     assert (out_dir / "before_after_summary.csv").exists()
     assert (out_dir / "evaluation_report.md").exists()
     assert (out_dir / "threshold_sweep.csv").exists()
+    assert (out_dir / "calibration_report.csv").exists()
     assert (out_dir / "case_review_template.csv").exists()
     review_rows = list(csv.DictReader((out_dir / "case_review_template.csv").open(encoding="utf-8")))
     assert 20 <= len(review_rows) <= 30
@@ -225,9 +227,14 @@ def test_evaluation_command_runs_and_preserves_warning_contract(tmp_path: Path) 
     assert len(threshold_rows) >= 10
     assert {"mode", "threshold", "macro_f1", "uncertain_rate", "changed_to_uncertain_rate"} <= set(threshold_rows[0])
     assert {"baseline", "improved"} <= {row["mode"] for row in threshold_rows}
+    calibration_rows = list(csv.DictReader((out_dir / "calibration_report.csv").open(encoding="utf-8")))
+    assert {"mode", "row_type", "confidence_bin", "avg_confidence", "accuracy", "ece", "reliability_flag"} <= set(calibration_rows[0])
+    assert {"baseline", "improved"} <= {row["mode"] for row in calibration_rows}
+    assert "overall" in {row["row_type"] for row in calibration_rows}
     report_text = (out_dir / "evaluation_report.md").read_text(encoding="utf-8")
     assert "Rapport d'évaluation automatique" in report_text
     assert "Analyse des seuils d'incertitude" in report_text
+    assert "Calibration des scores de confiance" in report_text
     assert "Contrôle qualité image" in report_text
     assert "Template des 20 à 30 cas commentés" in report_text
     assert db_path.exists()

@@ -49,12 +49,14 @@ Cette commande génère dans `eval/outputs/` :
 - `*_error_register.csv` : registre d'erreurs ;
 - `evaluation_report.md` : rapport automatique ;
 - `threshold_sweep.csv` : analyse du compromis seuil de confiance / abstention ;
+- `calibration_report.csv` : calibration des scores de confiance par intervalles ;
 - `case_review_template.csv` : tableau à compléter pour les 20 à 30 cas commentés.
 
-Vous pouvez aussi régénérer uniquement l'analyse des seuils d'incertitude ou le template de revue humaine :
+Vous pouvez aussi régénérer uniquement l'analyse des seuils d'incertitude, la calibration des confiances ou le template de revue humaine :
 
 ```bash
 python eval/threshold_sweep.py --out-dir eval/outputs
+python eval/calibration.py --out-dir eval/outputs
 python eval/generate_case_review.py --out-dir eval/outputs --limit 30
 ```
 
@@ -99,6 +101,7 @@ Assistant-Radiologue-IA/
 │   ├── reporting.py                    Rapport Markdown automatique
 │   ├── case_review.py                  Génération du tableau des cas commentés
 │   ├── threshold_sweep.py               Analyse des seuils de confiance / abstention
+│   ├── calibration.py                   Calibration des scores de confiance
 │   ├── generate_report.py              CLI pour régénérer le rapport
 │   ├── generate_case_review.py         CLI pour régénérer la revue de cas
 │   └── error_register_template.csv     Template du registre d'erreurs
@@ -122,7 +125,7 @@ Assistant-Radiologue-IA/
 │   └── rapport_evaluation.md           Résultats Llama 4 Scout sur CheXpert
 │
 ├── tests/                          ← Tests automatisés
-│   └── test_repository_smoke.py        8 smoke tests (structure, schéma, guardrails, API)
+│   └── test_repository_smoke.py        10 smoke tests (structure, schéma, guardrails, API)
 │
 ├── notebooks/                      ← Notebooks pédagogiques (squelettes)
 │   ├── 01_baseline_vlm.ipynb
@@ -172,7 +175,7 @@ pip install -r requirements-test.txt
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest -q
 ```
 
-Vérifie : structure du dépôt, contrat dataset, schéma JSON, garde-fous, contrôle qualité image, compilation Python, API, évaluation, rapport automatique et template des cas commentés.
+Vérifie : structure du dépôt, contrat dataset, schéma JSON, garde-fous, contrôle qualité image, compilation Python, API, évaluation, seuils d'incertitude, calibration, rapport automatique et template des cas commentés.
 
 ---
 
@@ -181,7 +184,7 @@ Vérifie : structure du dépôt, contrat dataset, schéma JSON, garde-fous, cont
 | Niveau | Attendu |
 |---|---|
 | **MUST** | Baseline reproductible, sortie JSON valide, warning obligatoire, logs, métriques, contrôle qualité image, mini-rapport |
-| **SHOULD** | Prompt amélioré, comparaison baseline/amélioration, dashboard, registre d'erreurs, seuils d'incertitude, template 20-30 cas commentés |
+| **SHOULD** | Prompt amélioré, comparaison baseline/amélioration, dashboard, registre d'erreurs, seuils d'incertitude, calibration des confiances, template 20-30 cas commentés |
 | **COULD** | LoRA expérimental, MedGemma/PEFT, localisation visuelle, ablations de prompts |
 
 ---

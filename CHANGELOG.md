@@ -7,6 +7,11 @@
 
 ## [Unreleased] — À venir
 
+### Ajouté
+- `eval/calibration.py` — analyse de calibration des scores de confiance par intervalles
+- `calibration_report.csv` — sortie générée automatiquement par `eval/run_evaluation.py`
+- Section calibration dans le rapport Markdown automatique et le dashboard Streamlit
+
 ### À faire
 - Évaluation complète `groq-baseline` vs `groq-improved` sur 30 radios CheXpert
 - Notebook `01_baseline_vlm.ipynb` — documentation résultats
