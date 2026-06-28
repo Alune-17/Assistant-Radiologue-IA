@@ -17,7 +17,7 @@ from api.main import health
 from src.guardrails import WARNING_TEXT, apply_safety_guardrails, validate_prediction
 from src.inference import toy_predict
 from src.metrics import summarize_metrics
-from src.preprocessing import validate_image_upload
+from src.preprocessing import image_quality_metadata, validate_image_upload
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -136,6 +136,17 @@ def test_upload_validation_rejects_fake_image() -> None:
         validate_image_upload("fake.png", b"not a real image")
 
 
+def test_quality_metadata_is_explainable() -> None:
+    image_path = ROOT / "data" / "synthetic" / "images" / "CXR_SYN_001_normal.png"
+    metadata = image_quality_metadata(image_path)
+
+    assert metadata["quality"] in {"good", "limited", "poor"}
+    assert metadata["width"] > 0
+    assert metadata["height"] > 0
+    assert isinstance(metadata["reasons"], list)
+    assert metadata["reasons"]
+
+
 def test_api_predict_preserves_uploaded_case_signal() -> None:
     client = TestClient(app)
     image_path = ROOT / "data" / "synthetic" / "images" / "CXR_SYN_002_suspected_opacity.png"
@@ -193,11 +204,23 @@ def test_evaluation_command_runs_and_preserves_warning_contract(tmp_path: Path) 
         "case_id",
         "ground_truth",
         "prediction",
+        "image_quality",
+        "quality_reasons",
         "error_type",
         "human_review_comment",
         "final_decision",
     } <= set(review_rows[0])
+    prediction_rows = list(csv.DictReader((out_dir / "baseline_predictions.csv").open(encoding="utf-8")))
+    assert {
+        "quality_width",
+        "quality_height",
+        "quality_brightness",
+        "quality_contrast",
+        "quality_aspect_ratio",
+        "quality_reasons",
+    } <= set(prediction_rows[0])
     report_text = (out_dir / "evaluation_report.md").read_text(encoding="utf-8")
     assert "Rapport d'évaluation automatique" in report_text
+    assert "Contrôle qualité image" in report_text
     assert "Template des 20 à 30 cas commentés" in report_text
     assert db_path.exists()

@@ -92,6 +92,11 @@ def run(mode: str, db_path: Path, cases_csv: Path | None = None) -> tuple[list[d
         error_type, severity, comment = classify_error(
             case["label"], pred["predicted_class"], pred.get("image_quality", ""), valid
         )
+        quality_checks = pred.get("quality_checks", {}) if isinstance(pred.get("quality_checks"), dict) else {}
+        quality_reasons = quality_checks.get("reasons", [])
+        if not isinstance(quality_reasons, list):
+            quality_reasons = [str(quality_reasons)]
+
         row = {
             "case_id": case["case_id"],
             "image_path": case.get("image_path", ""),
@@ -103,6 +108,12 @@ def run(mode: str, db_path: Path, cases_csv: Path | None = None) -> tuple[list[d
             "predicted_class": pred["predicted_class"],
             "confidence": pred["confidence"],
             "image_quality": pred.get("image_quality", ""),
+            "quality_width": quality_checks.get("width", ""),
+            "quality_height": quality_checks.get("height", ""),
+            "quality_brightness": quality_checks.get("brightness", ""),
+            "quality_contrast": quality_checks.get("contrast", ""),
+            "quality_aspect_ratio": quality_checks.get("aspect_ratio", ""),
+            "quality_reasons": "; ".join(str(reason) for reason in quality_reasons),
             "json_valid": valid,
             "warning": pred.get("warning", ""),
             "latency_ms": pred.get("latency_ms", 0),
@@ -129,6 +140,7 @@ def run(mode: str, db_path: Path, cases_csv: Path | None = None) -> tuple[list[d
                 "error_type": error_type,
                 "severity": severity,
                 "comment": comment,
+                "quality_reasons": row.get("quality_reasons", ""),
                 "corrective_action": corrective_action(error_type),
             }
         )

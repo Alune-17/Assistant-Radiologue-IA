@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from io import BytesIO
 from pathlib import Path
+from typing import Any
 import numpy as np
 from PIL import Image
 
@@ -45,23 +46,72 @@ def validate_image_upload(filename: str, content: bytes) -> str:
     return suffix
 
 
-def image_quality_metadata(path: str | Path) -> dict[str, float | int | str]:
-    """Retourne des métadonnées simples pour justifier le flag qualité."""
+def image_quality_report(path: str | Path) -> dict[str, Any]:
+    """Calcule un rapport de qualité image explicable et journalisable.
+
+    Le but n'est pas de valider cliniquement une radiographie, mais de fournir
+    des preuves simples pour expliquer pourquoi le prototype accepte, limite ou
+    refuse une interprétation automatique.
+    """
     path = Path(path)
     try:
-        img = Image.open(path)
-        w, h = img.size
-        gray = img.convert("L")
-        arr = np.array(gray, dtype=np.float32)
+        with Image.open(path) as img:
+            w, h = img.size
+            ratio = max(w, h) / max(min(w, h), 1)
+            gray = img.convert("L")
+            arr = np.array(gray, dtype=np.float32)
+
+        brightness = float(arr.mean())
+        contrast = float(arr.std())
+        reasons: list[str] = []
+        quality = "good"
+
+        if w < MIN_RESOLUTION or h < MIN_RESOLUTION:
+            quality = "poor"
+            reasons.append(f"résolution trop faible ({w}x{h}px)")
+
+        if ratio > MAX_ASPECT_RATIO:
+            quality = "limited" if quality != "poor" else quality
+            reasons.append(f"ratio d'aspect extrême ({ratio:.2f}:1)")
+
+        if brightness < BRIGHTNESS_LOW:
+            quality = "limited" if quality != "poor" else quality
+            reasons.append(f"image trop sombre (luminosité {brightness:.1f})")
+        elif brightness > BRIGHTNESS_HIGH:
+            quality = "limited" if quality != "poor" else quality
+            reasons.append(f"image trop claire (luminosité {brightness:.1f})")
+
+        if contrast < MIN_CONTRAST_STD:
+            quality = "limited" if quality != "poor" else quality
+            reasons.append(f"contraste faible (écart-type {contrast:.1f})")
+
+        if not reasons:
+            reasons.append("contrôles qualité basiques satisfaits")
+
         return {
             "width": int(w),
             "height": int(h),
-            "brightness": round(float(arr.mean()), 2),
-            "contrast": round(float(arr.std()), 2),
-            "quality": basic_quality_flag(path),
+            "aspect_ratio": round(float(ratio), 3),
+            "brightness": round(brightness, 2),
+            "contrast": round(contrast, 2),
+            "quality": quality,
+            "reasons": reasons,
         }
-    except Exception:
-        return {"width": 0, "height": 0, "brightness": 0.0, "contrast": 0.0, "quality": "poor"}
+    except Exception as exc:
+        return {
+            "width": 0,
+            "height": 0,
+            "aspect_ratio": 0.0,
+            "brightness": 0.0,
+            "contrast": 0.0,
+            "quality": "poor",
+            "reasons": [f"image illisible ou non ouverte ({type(exc).__name__})"],
+        }
+
+
+def image_quality_metadata(path: str | Path) -> dict[str, Any]:
+    """Alias historique : retourne le rapport de qualité image complet."""
+    return image_quality_report(path)
 
 
 def load_image(path: str | Path, size: tuple[int, int] = (512, 512)) -> Image.Image:
@@ -79,48 +129,5 @@ def load_image(path: str | Path, size: tuple[int, int] = (512, 512)) -> Image.Im
 
 
 def basic_quality_flag(path: str | Path) -> str:
-    """Analyse la qualité d'image basée sur les propriétés visuelles réelles.
-
-    Critères évalués :
-    - Résolution minimale (< 100×100 px → poor)
-    - Luminosité moyenne (trop sombre ou trop claire → limited)
-    - Contraste (écart-type des pixels en niveaux de gris → limited si faible)
-    - Ratio d'aspect extrême (> 5:1 → limited)
-
-    Returns:
-        "good" | "limited" | "poor"
-    """
-    path = Path(path)
-    try:
-        img = Image.open(path)
-        w, h = img.size
-
-        # Résolution insuffisante → poor
-        if w < MIN_RESOLUTION or h < MIN_RESOLUTION:
-            return "poor"
-
-        # Ratio d'aspect extrême → limited
-        ratio = max(w, h) / max(min(w, h), 1)
-        if ratio > MAX_ASPECT_RATIO:
-            return "limited"
-
-        # Analyse en niveaux de gris pour luminosité et contraste
-        gray = img.convert("L")
-        arr = np.array(gray, dtype=np.float32)
-
-        brightness = float(arr.mean())
-        contrast = float(arr.std())
-
-        # Luminosité hors plage → limited
-        if brightness < BRIGHTNESS_LOW or brightness > BRIGHTNESS_HIGH:
-            return "limited"
-
-        # Faible contraste → limited
-        if contrast < MIN_CONTRAST_STD:
-            return "limited"
-
-        return "good"
-
-    except Exception:
-        # En cas d'erreur d'ouverture ou d'analyse → poor (plus sûr)
-        return "poor"
+    """Retourne uniquement le flag qualité : ``good`` | ``limited`` | ``poor``."""
+    return str(image_quality_report(path)["quality"])

@@ -21,7 +21,7 @@ _client: Any | None = None
 if Groq is not None and os.getenv("GROQ_API_KEY"):
     _client = Groq(api_key=os.environ["GROQ_API_KEY"])
 
-from .preprocessing import basic_quality_flag
+from .preprocessing import image_quality_metadata
 
 WARNING = "Prototype pédagogique. Non destiné au diagnostic. Validation par un professionnel qualifié requise."
 
@@ -38,7 +38,8 @@ def toy_predict(image_path: str | Path, mode: str = "baseline") -> dict[str, Any
     """
     start = time.perf_counter()
     name = Path(image_path).name.lower()
-    quality = basic_quality_flag(image_path)
+    quality_checks = image_quality_metadata(image_path)
+    quality = str(quality_checks["quality"])
 
     if "suspected_opacity" in name:
         pred = "suspected_opacity"
@@ -70,6 +71,7 @@ def toy_predict(image_path: str | Path, mode: str = "baseline") -> dict[str, Any
         "justification": justification,
         "limitations": ["synthetic toy image", "no clinical context", "not a validated medical model"],
         "warning": WARNING,
+        "quality_checks": quality_checks,
         "model_name": f"toy-rule-{mode}",
         "prompt_version": f"{mode}_v1",
         "latency_ms": latency_ms,
@@ -106,7 +108,8 @@ def _groq_call(
         Dictionnaire JSON conforme au schéma du projet.
     """
     start = time.perf_counter()
-    quality = basic_quality_flag(image_path)
+    quality_checks = image_quality_metadata(image_path)
+    quality = str(quality_checks["quality"])
 
     # Structure de réponse par défaut (fallback sécurisé)
     result: dict[str, Any] = {
@@ -122,6 +125,7 @@ def _groq_call(
             "Pas un dispositif médical validé",
         ],
         "warning": WARNING,
+        "quality_checks": quality_checks,
         "model_name": GROQ_MODEL,
         "prompt_version": prompt_version,
         "latency_ms": 0,

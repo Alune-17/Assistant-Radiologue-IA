@@ -45,7 +45,7 @@ python eval/run_evaluation.py --mode toy
 Cette commande génère dans `eval/outputs/` :
 
 - `before_after_summary.csv` : comparaison baseline vs amélioration ;
-- `*_predictions.csv` : prédictions détaillées ;
+- `*_predictions.csv` : prédictions détaillées avec contrôles qualité image ;
 - `*_error_register.csv` : registre d'erreurs ;
 - `evaluation_report.md` : rapport automatique ;
 - `case_review_template.csv` : tableau à compléter pour les 20 à 30 cas commentés.
@@ -81,7 +81,7 @@ Assistant-Radiologue-IA/
 ├── src/                            ← Code source principal
 │   ├── inference.py                    Inférence toy + API Groq (Llama 4 Scout)
 │   ├── guardrails.py                   Validation JSON, warning, fallback uncertain
-│   ├── preprocessing.py                Qualité image (luminosité, contraste, résolution)
+│   ├── preprocessing.py                Rapport qualité image (résolution, contraste, luminosité, raisons)
 │   ├── metrics.py                      Accuracy, macro-F1, sensibilité, spécificité
 │   └── database.py                     Connecteur SQLite
 │
@@ -169,7 +169,7 @@ pip install -r requirements-test.txt
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest -q
 ```
 
-Vérifie : structure du dépôt, contrat dataset, schéma JSON, guardrails, compilation Python, API, évaluation, rapport automatique et template des cas commentés.
+Vérifie : structure du dépôt, contrat dataset, schéma JSON, garde-fous, contrôle qualité image, compilation Python, API, évaluation, rapport automatique et template des cas commentés.
 
 ---
 
@@ -177,7 +177,7 @@ Vérifie : structure du dépôt, contrat dataset, schéma JSON, guardrails, comp
 
 | Niveau | Attendu |
 |---|---|
-| **MUST** | Baseline reproductible, sortie JSON valide, warning obligatoire, logs, métriques, mini-rapport |
+| **MUST** | Baseline reproductible, sortie JSON valide, warning obligatoire, logs, métriques, contrôle qualité image, mini-rapport |
 | **SHOULD** | Prompt amélioré, comparaison baseline/amélioration, dashboard, registre d'erreurs, template 20-30 cas commentés |
 | **COULD** | LoRA expérimental, MedGemma/PEFT, localisation visuelle, ablations de prompts |
 

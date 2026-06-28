@@ -83,6 +83,27 @@ def selected_case_rows(error_rows: list[dict[str, str]], limit: int = 30) -> lis
     ]
 
 
+def summarize_quality_rows(prediction_rows: list[dict[str, str]]) -> list[dict[str, Any]]:
+    """Résume les contrôles qualité image présents dans les prédictions."""
+    quality_counts = Counter(row.get("image_quality", "unknown") for row in prediction_rows)
+    reason_counts: Counter[str] = Counter()
+    for row in prediction_rows:
+        for reason in row.get("quality_reasons", "").split(";"):
+            reason = reason.strip()
+            if reason:
+                reason_counts[reason] += 1
+
+    rows = [
+        {"type": "quality", "value": quality, "count": count}
+        for quality, count in quality_counts.most_common()
+    ]
+    rows.extend(
+        {"type": "reason", "value": reason, "count": count}
+        for reason, count in reason_counts.most_common(5)
+    )
+    return rows
+
+
 def generate_evaluation_report(out_dir: Path, report_path: Path) -> Path:
     """Génère un rapport Markdown lisible à partir des CSV d'évaluation.
 
@@ -131,7 +152,22 @@ def generate_evaluation_report(out_dir: Path, report_path: Path) -> Path:
     )
 
     if prediction_files:
-        lines.append("## 2. Matrices de confusion")
+        lines.append("## 2. Contrôle qualité image")
+        lines.append("")
+        lines.append(
+            "Cette section documente le prétraitement minimal : résolution, contraste, "
+            "luminosité, ratio d'aspect et raisons du flag qualité. Ces contrôles ne valident "
+            "pas médicalement l'image ; ils justifient seulement les garde-fous du prototype."
+        )
+        lines.append("")
+        for path in prediction_files:
+            rows = read_csv(path)
+            lines.append(f"### `{path.name}`")
+            lines.append("")
+            lines.append(markdown_table(summarize_quality_rows(rows), ["type", "value", "count"]))
+            lines.append("")
+
+        lines.append("## 3. Matrices de confusion")
         lines.append("")
         for path in prediction_files:
             rows = read_csv(path)
@@ -146,7 +182,7 @@ def generate_evaluation_report(out_dir: Path, report_path: Path) -> Path:
             lines.append("")
 
     if error_files:
-        lines.append("## 3. Registres d'erreurs")
+        lines.append("## 4. Registres d'erreurs")
         lines.append("")
         for path in error_files:
             rows = read_csv(path)
@@ -165,7 +201,7 @@ def generate_evaluation_report(out_dir: Path, report_path: Path) -> Path:
             lines.append("")
 
     if case_review_rows:
-        lines.append("## 4. Template des 20 à 30 cas commentés")
+        lines.append("## 5. Template des 20 à 30 cas commentés")
         lines.append("")
         lines.append(
             "Le fichier `case_review_template.csv` pré-sélectionne les cas à commenter "
@@ -189,7 +225,7 @@ def generate_evaluation_report(out_dir: Path, report_path: Path) -> Path:
         )
         lines.append("")
 
-    lines.append("## 5. Lecture responsable")
+    lines.append("## 6. Lecture responsable")
     lines.append("")
     lines.append(
         "Ce rapport sert à défendre la chaîne d'ingénierie : JSON valide, logs, métriques, "

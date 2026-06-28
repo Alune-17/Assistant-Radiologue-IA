@@ -109,6 +109,18 @@ def render_analysis_tab() -> None:
         for lim in pred.get("limitations", []):
             st.markdown(f"- {lim}")
 
+        quality_checks = pred.get("quality_checks", {})
+        if isinstance(quality_checks, dict) and quality_checks:
+            st.markdown("**🧪 Contrôle qualité image**")
+            q_cols = st.columns(4)
+            q_cols[0].metric("Taille", f"{quality_checks.get('width', 0)}×{quality_checks.get('height', 0)}")
+            q_cols[1].metric("Luminosité", quality_checks.get("brightness", "—"))
+            q_cols[2].metric("Contraste", quality_checks.get("contrast", "—"))
+            q_cols[3].metric("Ratio", quality_checks.get("aspect_ratio", "—"))
+            reasons = quality_checks.get("reasons", [])
+            if reasons:
+                st.caption("Raisons : " + " ; ".join(str(reason) for reason in reasons))
+
         st.markdown(f"**🕐 Latence** : `{pred.get('latency_ms', 0)} ms`")
         st.markdown(f"**🤖 Modèle** : `{pred.get('model_name', '—')}`")
         st.markdown(f"**📝 Prompt** : `{pred.get('prompt_version', '—')}`")
@@ -157,7 +169,36 @@ def render_dashboard_tab() -> None:
         st.dataframe(error_df, use_container_width=True)
         if "error_type" in error_df.columns:
             st.bar_chart(error_df["error_type"].value_counts())
+        if "quality_reasons" in error_df.columns:
+            with st.expander("Raisons de qualité image dans ce registre"):
+                st.dataframe(error_df[["case_id", "quality_reasons"]], use_container_width=True)
 
+    prediction_files = sorted(OUTPUT_DIR.glob("*_predictions.csv"))
+    if prediction_files:
+        st.markdown("### Contrôle qualité image")
+        selected_predictions = st.selectbox(
+            "Fichier de prédictions",
+            [p.name for p in prediction_files],
+            key="quality_prediction_file",
+        )
+        quality_df = pd.read_csv(OUTPUT_DIR / selected_predictions)
+        quality_columns = [
+            col
+            for col in [
+                "case_id",
+                "image_quality",
+                "quality_width",
+                "quality_height",
+                "quality_brightness",
+                "quality_contrast",
+                "quality_aspect_ratio",
+                "quality_reasons",
+            ]
+            if col in quality_df.columns
+        ]
+        st.dataframe(quality_df[quality_columns], use_container_width=True)
+        if "image_quality" in quality_df.columns:
+            st.bar_chart(quality_df["image_quality"].value_counts())
 
     case_review_path = OUTPUT_DIR / "case_review_template.csv"
     if case_review_path.exists():
