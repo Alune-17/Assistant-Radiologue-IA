@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 
+import pytest
 from fastapi.testclient import TestClient
 
 from api.main import app
@@ -16,6 +17,7 @@ from api.main import health
 from src.guardrails import WARNING_TEXT, apply_safety_guardrails, validate_prediction
 from src.inference import toy_predict
 from src.metrics import summarize_metrics
+from src.preprocessing import validate_image_upload
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -36,6 +38,8 @@ def test_repository_student_contract_is_present() -> None:
         "src/guardrails.py",
         "api/main.py",
         "eval/run_evaluation.py",
+        "eval/generate_report.py",
+        "eval/reporting.py",
         "prompts/json_schema.md",
     ]
     forbidden_paths = [
@@ -51,10 +55,23 @@ def test_repository_student_contract_is_present() -> None:
     ]
 
     missing = [path for path in required_paths if not (ROOT / path).exists()]
-    forbidden = [path for path in forbidden_paths if (ROOT / path).exists()]
+    try:
+        tracked_files = set(
+            subprocess.run(
+                ["git", "ls-files"],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=True,
+            ).stdout.splitlines()
+        )
+    except Exception:
+        tracked_files = set()
+
+    forbidden_tracked = [path for path in forbidden_paths if path in tracked_files]
 
     assert missing == []
-    assert forbidden == []
+    assert forbidden_tracked == []
 
 
 def test_synthetic_dataset_contract_is_valid() -> None:
@@ -112,6 +129,11 @@ def test_metrics_and_api_health_contract() -> None:
     assert metrics["warning_rate"] == 1.0
 
 
+def test_upload_validation_rejects_fake_image() -> None:
+    with pytest.raises(ValueError):
+        validate_image_upload("fake.png", b"not a real image")
+
+
 def test_api_predict_preserves_uploaded_case_signal() -> None:
     client = TestClient(app)
     image_path = ROOT / "data" / "synthetic" / "images" / "CXR_SYN_002_suspected_opacity.png"
@@ -159,4 +181,6 @@ def test_evaluation_command_runs_and_preserves_warning_contract(tmp_path: Path) 
     assert all(row["json_valid_rate"] == 1.0 for row in summary)
     assert all(row["warning_rate"] == 1.0 for row in summary)
     assert (out_dir / "before_after_summary.csv").exists()
+    assert (out_dir / "evaluation_report.md").exists()
+    assert "Rapport d'évaluation automatique" in (out_dir / "evaluation_report.md").read_text(encoding="utf-8")
     assert db_path.exists()

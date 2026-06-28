@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import os
 import re
-import shutil
 from pathlib import Path
+from uuid import uuid4
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 
 from src.inference import toy_predict, groq_predict_baseline, groq_predict_improved
 from src.guardrails import apply_safety_guardrails
-from src.preprocessing import ALLOWED_SUFFIXES, basic_quality_flag
+from src.preprocessing import validate_image_upload
 from src.database import insert_run
 
 app = FastAPI(
@@ -54,19 +54,16 @@ async def predict(
 
     UPLOAD_DIR.mkdir(exist_ok=True)
     filename = Path(file.filename or "image.png").name
-    suffix = Path(filename).suffix.lower() or ".png"
-    if suffix not in ALLOWED_SUFFIXES:
-        raise HTTPException(status_code=400, detail=f"Format non supporté : {suffix}. Formats autorisés : {sorted(ALLOWED_SUFFIXES)}")
+    content = await file.read()
+    try:
+        suffix = validate_image_upload(filename, content)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     stem = Path(filename).stem or "image"
-    safe_stem = re.sub(r"[^A-Za-z0-9_.-]+", "_", stem)
-    target = UPLOAD_DIR / f"uploaded_{safe_stem}{suffix}"
-    with target.open("wb") as f:
-        shutil.copyfileobj(file.file, f)
-
-    if basic_quality_flag(target) == "poor":
-        # On n'interdit pas forcément l'analyse, mais on signale la mauvaise qualité via le JSON.
-        pass
+    safe_stem = re.sub(r"[^A-Za-z0-9_.-]+", "_", stem)[:80]
+    target = UPLOAD_DIR / f"uploaded_{safe_stem}_{uuid4().hex[:8]}{suffix}"
+    target.write_bytes(content)
 
     pred = apply_safety_guardrails(MODELS[model](target))
     try:

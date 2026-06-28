@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from io import BytesIO
 from pathlib import Path
 import numpy as np
 from PIL import Image
 
 ALLOWED_SUFFIXES = {".png", ".jpg", ".jpeg", ".bmp"}
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 Mo : suffisant pour une démo, évite les uploads abusifs
 
 # Seuils de qualité image (empiriques, documentés)
 MIN_RESOLUTION = 100          # px — en dessous : poor
@@ -12,6 +14,54 @@ MIN_CONTRAST_STD = 15.0       # écart-type pixel — faible contraste = limited
 BRIGHTNESS_LOW = 30.0         # luminosité moyenne trop sombre = limited
 BRIGHTNESS_HIGH = 225.0       # luminosité moyenne trop claire = limited
 MAX_ASPECT_RATIO = 5.0        # ratio w/h ou h/w extrême = limited
+
+
+def validate_image_upload(filename: str, content: bytes) -> str:
+    """Valide un upload avant écriture disque.
+
+    Le contrôle combine suffixe, taille et vérification Pillow. Cela évite de
+    traiter un fichier non-image renommé en .png/.jpg et sécurise l'API.
+
+    Returns:
+        Suffixe normalisé de l'image, par exemple `.png`.
+
+    Raises:
+        ValueError: si le fichier ne respecte pas les contraintes du prototype.
+    """
+    suffix = Path(filename or "image.png").suffix.lower() or ".png"
+    if suffix not in ALLOWED_SUFFIXES:
+        raise ValueError(f"Format non supporté : {suffix}. Formats autorisés : {sorted(ALLOWED_SUFFIXES)}")
+    if not content:
+        raise ValueError("Fichier vide.")
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise ValueError(f"Fichier trop volumineux : maximum {MAX_UPLOAD_BYTES // (1024 * 1024)} Mo.")
+
+    try:
+        with Image.open(BytesIO(content)) as image:
+            image.verify()
+    except Exception as exc:
+        raise ValueError("Le fichier uploadé n'est pas une image valide.") from exc
+
+    return suffix
+
+
+def image_quality_metadata(path: str | Path) -> dict[str, float | int | str]:
+    """Retourne des métadonnées simples pour justifier le flag qualité."""
+    path = Path(path)
+    try:
+        img = Image.open(path)
+        w, h = img.size
+        gray = img.convert("L")
+        arr = np.array(gray, dtype=np.float32)
+        return {
+            "width": int(w),
+            "height": int(h),
+            "brightness": round(float(arr.mean()), 2),
+            "contrast": round(float(arr.std()), 2),
+            "quality": basic_quality_flag(path),
+        }
+    except Exception:
+        return {"width": 0, "height": 0, "brightness": 0.0, "contrast": 0.0, "quality": "poor"}
 
 
 def load_image(path: str | Path, size: tuple[int, int] = (512, 512)) -> Image.Image:

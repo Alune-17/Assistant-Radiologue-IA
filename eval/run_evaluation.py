@@ -13,6 +13,7 @@ from src.inference import toy_predict, groq_predict_baseline, groq_predict_impro
 from src.guardrails import apply_safety_guardrails, validate_prediction
 from src.metrics import summarize_metrics
 from src.database import insert_run, insert_evaluation, init_db
+from eval.reporting import generate_evaluation_report
 
 # Mapping mode → fonction d'inférence
 INFERENCE_MAP = {
@@ -192,7 +193,9 @@ def main() -> None:
             print(f"   {k}: {v}", file=sys.stderr)
 
     write_csv(out_dir / "before_after_summary.csv", summary)
+    report_path = generate_evaluation_report(out_dir, out_dir / "evaluation_report.md")
     print(f"\n[DONE] Resultats ecrits dans {out_dir}", file=sys.stderr)
+    print(f"[DONE] Rapport Markdown : {report_path}", file=sys.stderr)
     print(json.dumps(summary, indent=2, ensure_ascii=False))
 
 

@@ -158,6 +158,20 @@ def render_dashboard_tab() -> None:
         if "error_type" in error_df.columns:
             st.bar_chart(error_df["error_type"].value_counts())
 
+
+    report_path = OUTPUT_DIR / "evaluation_report.md"
+    if report_path.exists():
+        st.markdown("### Rapport automatique")
+        report_text = report_path.read_text(encoding="utf-8")
+        with st.expander("Voir le rapport Markdown généré", expanded=False):
+            st.markdown(report_text)
+        st.download_button(
+            "Télécharger le rapport Markdown",
+            data=report_text,
+            file_name="rapport_evaluation_automatique.md",
+            mime="text/markdown",
+        )
+
     recent_runs = fetch_recent_runs(DB_PATH, limit=50)
     st.markdown("### Derniers runs SQLite")
     if recent_runs:
