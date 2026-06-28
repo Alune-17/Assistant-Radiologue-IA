@@ -1,25 +1,29 @@
 from __future__ import annotations
 
+import os
 import re
 import shutil
 from pathlib import Path
-from fastapi import FastAPI, File, Query, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 
 from src.inference import toy_predict, groq_predict_baseline, groq_predict_improved
 from src.guardrails import apply_safety_guardrails
+from src.preprocessing import ALLOWED_SUFFIXES, basic_quality_flag
+from src.database import insert_run
 
 app = FastAPI(
     title="Assistant radiologue virtuel EFREI",
-    version="0.2.0",
+    version="0.5.0",
     description="Prototype pédagogique — non destiné au diagnostic médical.",
 )
 UPLOAD_DIR = Path("tmp_uploads")
+DB_PATH = Path(os.getenv("ARVIRX_DB_PATH", str(UPLOAD_DIR / "medical_ai_evidence.sqlite")))
 
 # Mapping nom → fonction d'inférence
 MODELS = {
-    "toy":              lambda p: toy_predict(p, mode="baseline"),
-    "groq-baseline":  groq_predict_baseline,
-    "groq-improved":  groq_predict_improved,
+    "toy": lambda p: toy_predict(p, mode="baseline"),
+    "groq-baseline": groq_predict_baseline,
+    "groq-improved": groq_predict_improved,
 }
 
 
@@ -45,15 +49,28 @@ async def predict(
     - **file**: Image PNG/JPG/JPEG/BMP à analyser.
     - **model**: Sélection du modèle (`toy` par défaut, pas d'appel API externe).
     """
+    if model not in MODELS:
+        raise HTTPException(status_code=400, detail=f"Modèle inconnu. Valeurs autorisées : {sorted(MODELS)}")
+
     UPLOAD_DIR.mkdir(exist_ok=True)
     filename = Path(file.filename or "image.png").name
-    suffix = Path(filename).suffix or ".png"
+    suffix = Path(filename).suffix.lower() or ".png"
+    if suffix not in ALLOWED_SUFFIXES:
+        raise HTTPException(status_code=400, detail=f"Format non supporté : {suffix}. Formats autorisés : {sorted(ALLOWED_SUFFIXES)}")
+
     stem = Path(filename).stem or "image"
     safe_stem = re.sub(r"[^A-Za-z0-9_.-]+", "_", stem)
     target = UPLOAD_DIR / f"uploaded_{safe_stem}{suffix}"
     with target.open("wb") as f:
         shutil.copyfileobj(file.file, f)
 
-    predict_fn = MODELS.get(model, MODELS["toy"])
-    pred = predict_fn(target)
-    return apply_safety_guardrails(pred)
+    if basic_quality_flag(target) == "poor":
+        # On n'interdit pas forcément l'analyse, mais on signale la mauvaise qualité via le JSON.
+        pass
+
+    pred = apply_safety_guardrails(MODELS[model](target))
+    try:
+        insert_run(DB_PATH, f"upload:{safe_stem}", str(target), pred)
+    except Exception as exc:  # Le rendu JSON ne doit pas tomber si SQLite est indisponible.
+        pred.setdefault("limitations", []).append(f"log SQLite non enregistré: {type(exc).__name__}")
+    return pred

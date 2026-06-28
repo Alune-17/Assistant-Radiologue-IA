@@ -7,16 +7,18 @@ import os
 import json
 import re
 import base64
-import PIL.Image
 from dotenv import load_dotenv
 
-from groq import Groq
+try:
+    from groq import Groq
+except ImportError:  # Permet aux tests et au mode toy de fonctionner sans dépendance API.
+    Groq = None  # type: ignore[assignment]
 
 load_dotenv()
 
-# Client Groq initialisé une seule fois (None si la clé est absente)
-_client: Groq | None = None
-if os.getenv("GROQ_API_KEY"):
+# Client Groq initialisé une seule fois (None si la clé ou le package est absent)
+_client: Any | None = None
+if Groq is not None and os.getenv("GROQ_API_KEY"):
     _client = Groq(api_key=os.environ["GROQ_API_KEY"])
 
 from .preprocessing import basic_quality_flag
@@ -126,10 +128,17 @@ def _groq_call(
     }
 
     if _client is None:
-        result["justification"] = (
-            "Clé API GROQ_API_KEY manquante dans le fichier .env. "
-            "Créez un fichier .env à la racine du projet avec votre clé gratuite (console.groq.com)."
-        )
+        if Groq is None:
+            result["justification"] = (
+                "Le package Python 'groq' n'est pas installé. "
+                "Installez les dépendances avec `pip install -r requirements.txt` ou utilisez le mode toy local."
+            )
+        else:
+            result["justification"] = (
+                "Clé API GROQ_API_KEY manquante dans le fichier .env. "
+                "Créez un fichier .env à la racine du projet avec votre clé gratuite (console.groq.com)."
+            )
+        result["latency_ms"] = int((time.perf_counter() - start) * 1000)
         return result
 
     try:
