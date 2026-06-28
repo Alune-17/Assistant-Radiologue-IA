@@ -159,6 +159,22 @@ def render_dashboard_tab() -> None:
             st.bar_chart(error_df["error_type"].value_counts())
 
 
+    case_review_path = OUTPUT_DIR / "case_review_template.csv"
+    if case_review_path.exists():
+        st.markdown("### Template des cas à commenter")
+        case_review_df = pd.read_csv(case_review_path)
+        st.caption(
+            "Ce CSV pré-sélectionne jusqu'à 30 cas pour le rapport critique. "
+            "Complétez manuellement les colonnes d'observation humaine avant le rendu."
+        )
+        st.dataframe(case_review_df, use_container_width=True)
+        st.download_button(
+            "Télécharger le template de revue de cas",
+            data=case_review_path.read_text(encoding="utf-8"),
+            file_name="case_review_template.csv",
+            mime="text/csv",
+        )
+
     report_path = OUTPUT_DIR / "evaluation_report.md"
     if report_path.exists():
         st.markdown("### Rapport automatique")

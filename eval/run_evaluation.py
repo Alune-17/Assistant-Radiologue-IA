@@ -14,6 +14,7 @@ from src.guardrails import apply_safety_guardrails, validate_prediction
 from src.metrics import summarize_metrics
 from src.database import insert_run, insert_evaluation, init_db
 from eval.reporting import generate_evaluation_report
+from eval.case_review import build_case_review_template
 
 # Mapping mode → fonction d'inférence
 INFERENCE_MAP = {
@@ -93,6 +94,11 @@ def run(mode: str, db_path: Path, cases_csv: Path | None = None) -> tuple[list[d
         )
         row = {
             "case_id": case["case_id"],
+            "image_path": case.get("image_path", ""),
+            "source": case.get("source", ""),
+            "split": case.get("split", ""),
+            "reference_quality": case.get("quality", ""),
+            "dataset_notes": case.get("notes", ""),
             "label": case["label"],
             "predicted_class": pred["predicted_class"],
             "confidence": pred["confidence"],
@@ -193,9 +199,12 @@ def main() -> None:
             print(f"   {k}: {v}", file=sys.stderr)
 
     write_csv(out_dir / "before_after_summary.csv", summary)
+    case_review_path = build_case_review_template(out_dir, out_dir / "case_review_template.csv", limit=30)
     report_path = generate_evaluation_report(out_dir, out_dir / "evaluation_report.md")
     print(f"\n[DONE] Resultats ecrits dans {out_dir}", file=sys.stderr)
     print(f"[DONE] Rapport Markdown : {report_path}", file=sys.stderr)
+    if case_review_path is not None:
+        print(f"[DONE] Template revue de cas : {case_review_path}", file=sys.stderr)
     print(json.dumps(summary, indent=2, ensure_ascii=False))
 
 

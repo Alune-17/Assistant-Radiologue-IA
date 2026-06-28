@@ -42,6 +42,20 @@ streamlit run app/streamlit_app.py
 python eval/run_evaluation.py --mode toy
 ```
 
+Cette commande génère dans `eval/outputs/` :
+
+- `before_after_summary.csv` : comparaison baseline vs amélioration ;
+- `*_predictions.csv` : prédictions détaillées ;
+- `*_error_register.csv` : registre d'erreurs ;
+- `evaluation_report.md` : rapport automatique ;
+- `case_review_template.csv` : tableau à compléter pour les 20 à 30 cas commentés.
+
+Vous pouvez aussi régénérer uniquement le template de revue humaine :
+
+```bash
+python eval/generate_case_review.py --out-dir eval/outputs --limit 30
+```
+
 ### 5. Évaluation sur les vraies radios (CheXpert)
 
 ```bash
@@ -78,8 +92,12 @@ Assistant-Radiologue-IA/
 │   ├── streamlit_app.py                Interface principale (4 modes d'analyse)
 │   └── gradio_app.py                   Interface alternative (mode toy)
 │
-├── eval/                           ← Évaluation et registre d'erreurs
+├── eval/                           ← Évaluation, rapports et registre d'erreurs
 │   ├── run_evaluation.py               Script d'évaluation batch
+│   ├── reporting.py                    Rapport Markdown automatique
+│   ├── case_review.py                  Génération du tableau des cas commentés
+│   ├── generate_report.py              CLI pour régénérer le rapport
+│   ├── generate_case_review.py         CLI pour régénérer la revue de cas
 │   └── error_register_template.csv     Template du registre d'erreurs
 │
 ├── data/                           ← Données
@@ -151,7 +169,7 @@ pip install -r requirements-test.txt
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest -q
 ```
 
-Vérifie : structure du dépôt, contrat dataset, schéma JSON, guardrails, compilation Python, API, évaluation.
+Vérifie : structure du dépôt, contrat dataset, schéma JSON, guardrails, compilation Python, API, évaluation, rapport automatique et template des cas commentés.
 
 ---
 
@@ -160,7 +178,7 @@ Vérifie : structure du dépôt, contrat dataset, schéma JSON, guardrails, comp
 | Niveau | Attendu |
 |---|---|
 | **MUST** | Baseline reproductible, sortie JSON valide, warning obligatoire, logs, métriques, mini-rapport |
-| **SHOULD** | Prompt amélioré, comparaison baseline/amélioration, dashboard, registre d'erreurs |
+| **SHOULD** | Prompt amélioré, comparaison baseline/amélioration, dashboard, registre d'erreurs, template 20-30 cas commentés |
 | **COULD** | LoRA expérimental, MedGemma/PEFT, localisation visuelle, ablations de prompts |
 
 ---

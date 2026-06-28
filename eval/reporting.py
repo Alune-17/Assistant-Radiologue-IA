@@ -96,6 +96,7 @@ def generate_evaluation_report(out_dir: Path, report_path: Path) -> Path:
     summary_rows = read_csv(out_dir / "before_after_summary.csv")
     prediction_files = sorted(out_dir.glob("*_predictions.csv"))
     error_files = sorted(out_dir.glob("*_error_register.csv"))
+    case_review_rows = read_csv(out_dir / "case_review_template.csv")
 
     lines: list[str] = []
     lines.append("# Rapport d'évaluation automatique")
@@ -163,7 +164,32 @@ def generate_evaluation_report(out_dir: Path, report_path: Path) -> Path:
             )
             lines.append("")
 
-    lines.append("## 4. Lecture responsable")
+    if case_review_rows:
+        lines.append("## 4. Template des 20 à 30 cas commentés")
+        lines.append("")
+        lines.append(
+            "Le fichier `case_review_template.csv` pré-sélectionne les cas à commenter "
+            "en priorité pour le rapport final. Les colonnes `visible_findings_to_describe`, "
+            "`human_review_comment`, `final_decision` et `screenshot_or_figure_ref` sont à compléter manuellement."
+        )
+        lines.append("")
+        lines.append(
+            markdown_table(
+                case_review_rows[:10],
+                [
+                    "review_rank",
+                    "mode",
+                    "case_id",
+                    "ground_truth",
+                    "prediction",
+                    "error_type",
+                    "priority_reason",
+                ],
+            )
+        )
+        lines.append("")
+
+    lines.append("## 5. Lecture responsable")
     lines.append("")
     lines.append(
         "Ce rapport sert à défendre la chaîne d'ingénierie : JSON valide, logs, métriques, "

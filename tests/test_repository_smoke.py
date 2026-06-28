@@ -40,6 +40,8 @@ def test_repository_student_contract_is_present() -> None:
         "eval/run_evaluation.py",
         "eval/generate_report.py",
         "eval/reporting.py",
+        "eval/case_review.py",
+        "eval/generate_case_review.py",
         "prompts/json_schema.md",
     ]
     forbidden_paths = [
@@ -182,5 +184,20 @@ def test_evaluation_command_runs_and_preserves_warning_contract(tmp_path: Path) 
     assert all(row["warning_rate"] == 1.0 for row in summary)
     assert (out_dir / "before_after_summary.csv").exists()
     assert (out_dir / "evaluation_report.md").exists()
-    assert "Rapport d'évaluation automatique" in (out_dir / "evaluation_report.md").read_text(encoding="utf-8")
+    assert (out_dir / "case_review_template.csv").exists()
+    review_rows = list(csv.DictReader((out_dir / "case_review_template.csv").open(encoding="utf-8")))
+    assert 20 <= len(review_rows) <= 30
+    assert {
+        "review_rank",
+        "mode",
+        "case_id",
+        "ground_truth",
+        "prediction",
+        "error_type",
+        "human_review_comment",
+        "final_decision",
+    } <= set(review_rows[0])
+    report_text = (out_dir / "evaluation_report.md").read_text(encoding="utf-8")
+    assert "Rapport d'évaluation automatique" in report_text
+    assert "Template des 20 à 30 cas commentés" in report_text
     assert db_path.exists()
