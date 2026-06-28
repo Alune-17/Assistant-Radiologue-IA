@@ -161,6 +161,26 @@ def render_dashboard_tab() -> None:
     else:
         st.info("Aucune synthèse d'évaluation trouvée. Lancez : `python eval/run_evaluation.py --mode toy`.")
 
+    threshold_path = OUTPUT_DIR / "threshold_sweep.csv"
+    if threshold_path.exists():
+        st.markdown("### Analyse des seuils d'incertitude")
+        threshold_df = pd.read_csv(threshold_path)
+        st.caption(
+            "Ce tableau simule plusieurs seuils de confiance : sous le seuil, "
+            "la prédiction est remplacée par `uncertain` pour documenter le compromis sécurité/performance."
+        )
+        st.dataframe(threshold_df, use_container_width=True)
+        if {"mode", "threshold", "macro_f1", "uncertain_rate"} <= set(threshold_df.columns):
+            selected_mode = st.selectbox(
+                "Mode pour la courbe de seuil",
+                sorted(threshold_df["mode"].unique()),
+                key="threshold_mode",
+            )
+            mode_df = threshold_df[threshold_df["mode"] == selected_mode].set_index("threshold")
+            chart_cols = [col for col in ["macro_f1", "accuracy", "uncertain_rate"] if col in mode_df.columns]
+            if chart_cols:
+                st.line_chart(mode_df[chart_cols])
+
     error_files = sorted(OUTPUT_DIR.glob("*_error_register.csv"))
     if error_files:
         st.markdown("### Registre d'erreurs")

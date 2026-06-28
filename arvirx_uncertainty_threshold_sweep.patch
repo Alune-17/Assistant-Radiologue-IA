@@ -1,0 +1,387 @@
+diff -ruN '--exclude=.DS_Store' '--exclude=medical_ai_evidence.sqlite' '--exclude=__pycache__' '--exclude=.pytest_cache' arvirx6/Assistant-Radiologue-IA/README.md arvirx6_mod/README.md
+--- a/README.md	2026-06-28 20:27:13.000000000 +0000
++++ b/README.md	2026-06-28 20:38:03.480719972 +0000
+@@ -48,11 +48,13 @@
+ - `*_predictions.csv` : prédictions détaillées avec contrôles qualité image ;
+ - `*_error_register.csv` : registre d'erreurs ;
+ - `evaluation_report.md` : rapport automatique ;
++- `threshold_sweep.csv` : analyse du compromis seuil de confiance / abstention ;
+ - `case_review_template.csv` : tableau à compléter pour les 20 à 30 cas commentés.
+ 
+-Vous pouvez aussi régénérer uniquement le template de revue humaine :
++Vous pouvez aussi régénérer uniquement l'analyse des seuils d'incertitude ou le template de revue humaine :
+ 
+ ```bash
++python eval/threshold_sweep.py --out-dir eval/outputs
+ python eval/generate_case_review.py --out-dir eval/outputs --limit 30
+ ```
+ 
+@@ -96,6 +98,7 @@
+ │   ├── run_evaluation.py               Script d'évaluation batch
+ │   ├── reporting.py                    Rapport Markdown automatique
+ │   ├── case_review.py                  Génération du tableau des cas commentés
++│   ├── threshold_sweep.py               Analyse des seuils de confiance / abstention
+ │   ├── generate_report.py              CLI pour régénérer le rapport
+ │   ├── generate_case_review.py         CLI pour régénérer la revue de cas
+ │   └── error_register_template.csv     Template du registre d'erreurs
+@@ -178,7 +181,7 @@
+ | Niveau | Attendu |
+ |---|---|
+ | **MUST** | Baseline reproductible, sortie JSON valide, warning obligatoire, logs, métriques, contrôle qualité image, mini-rapport |
+-| **SHOULD** | Prompt amélioré, comparaison baseline/amélioration, dashboard, registre d'erreurs, template 20-30 cas commentés |
++| **SHOULD** | Prompt amélioré, comparaison baseline/amélioration, dashboard, registre d'erreurs, seuils d'incertitude, template 20-30 cas commentés |
+ | **COULD** | LoRA expérimental, MedGemma/PEFT, localisation visuelle, ablations de prompts |
+ 
+ ---
+diff -ruN '--exclude=.DS_Store' '--exclude=medical_ai_evidence.sqlite' '--exclude=__pycache__' '--exclude=.pytest_cache' arvirx6/Assistant-Radiologue-IA/app/streamlit_app.py arvirx6_mod/app/streamlit_app.py
+--- a/app/streamlit_app.py	2026-06-28 20:27:13.000000000 +0000
++++ b/app/streamlit_app.py	2026-06-28 20:37:51.191730215 +0000
+@@ -161,6 +161,26 @@
+     else:
+         st.info("Aucune synthèse d'évaluation trouvée. Lancez : `python eval/run_evaluation.py --mode toy`.")
+ 
++    threshold_path = OUTPUT_DIR / "threshold_sweep.csv"
++    if threshold_path.exists():
++        st.markdown("### Analyse des seuils d'incertitude")
++        threshold_df = pd.read_csv(threshold_path)
++        st.caption(
++            "Ce tableau simule plusieurs seuils de confiance : sous le seuil, "
++            "la prédiction est remplacée par `uncertain` pour documenter le compromis sécurité/performance."
++        )
++        st.dataframe(threshold_df, use_container_width=True)
++        if {"mode", "threshold", "macro_f1", "uncertain_rate"} <= set(threshold_df.columns):
++            selected_mode = st.selectbox(
++                "Mode pour la courbe de seuil",
++                sorted(threshold_df["mode"].unique()),
++                key="threshold_mode",
++            )
++            mode_df = threshold_df[threshold_df["mode"] == selected_mode].set_index("threshold")
++            chart_cols = [col for col in ["macro_f1", "accuracy", "uncertain_rate"] if col in mode_df.columns]
++            if chart_cols:
++                st.line_chart(mode_df[chart_cols])
++
+     error_files = sorted(OUTPUT_DIR.glob("*_error_register.csv"))
+     if error_files:
+         st.markdown("### Registre d'erreurs")
+diff -ruN '--exclude=.DS_Store' '--exclude=medical_ai_evidence.sqlite' '--exclude=__pycache__' '--exclude=.pytest_cache' arvirx6/Assistant-Radiologue-IA/eval/reporting.py arvirx6_mod/eval/reporting.py
+--- a/eval/reporting.py	2026-06-28 20:27:13.000000000 +0000
++++ b/eval/reporting.py	2026-06-28 20:37:24.051929057 +0000
+@@ -104,6 +104,30 @@
+     return rows
+ 
+ 
++
++
++def summarize_threshold_sweep(rows: list[dict[str, str]]) -> list[dict[str, Any]]:
++    """Sélectionne quelques seuils lisibles pour le rapport Markdown."""
++    if not rows:
++        return []
++    interesting = {"0.5", "0.6", "0.7", "0.8", "0.50", "0.60", "0.70", "0.80"}
++    filtered = [row for row in rows if str(row.get("threshold", "")) in interesting]
++    if not filtered:
++        filtered = rows
++    return [
++        {
++            "mode": row.get("mode", ""),
++            "threshold": row.get("threshold", ""),
++            "accuracy": row.get("accuracy", ""),
++            "macro_f1": row.get("macro_f1", ""),
++            "sensitivity": row.get("sensitivity", ""),
++            "specificity": row.get("specificity", ""),
++            "uncertain_rate": row.get("uncertain_rate", ""),
++            "changed_to_uncertain_rate": row.get("changed_to_uncertain_rate", ""),
++        }
++        for row in filtered
++    ]
++
+ def generate_evaluation_report(out_dir: Path, report_path: Path) -> Path:
+     """Génère un rapport Markdown lisible à partir des CSV d'évaluation.
+ 
+@@ -118,6 +142,7 @@
+     prediction_files = sorted(out_dir.glob("*_predictions.csv"))
+     error_files = sorted(out_dir.glob("*_error_register.csv"))
+     case_review_rows = read_csv(out_dir / "case_review_template.csv")
++    threshold_rows = read_csv(out_dir / "threshold_sweep.csv")
+ 
+     lines: list[str] = []
+     lines.append("# Rapport d'évaluation automatique")
+@@ -151,8 +176,35 @@
+         )
+     )
+ 
++    if threshold_rows:
++        lines.append("## 2. Analyse des seuils d'incertitude")
++        lines.append("")
++        lines.append(
++            "Cette section post-traite les prédictions avec plusieurs seuils de confiance. "
++            "Elle permet de documenter le compromis entre performance brute et abstention prudente : "
++            "plus le seuil augmente, plus le système bascule vers `uncertain`."
++        )
++        lines.append("")
++        lines.append(
++            markdown_table(
++                summarize_threshold_sweep(threshold_rows),
++                [
++                    "mode",
++                    "threshold",
++                    "accuracy",
++                    "macro_f1",
++                    "sensitivity",
++                    "specificity",
++                    "uncertain_rate",
++                    "changed_to_uncertain_rate",
++                ],
++            )
++        )
++        lines.append("")
++
+     if prediction_files:
+-        lines.append("## 2. Contrôle qualité image")
++        section_number = "3" if threshold_rows else "2"
++        lines.append(f"## {section_number}. Contrôle qualité image")
+         lines.append("")
+         lines.append(
+             "Cette section documente le prétraitement minimal : résolution, contraste, "
+@@ -167,7 +219,8 @@
+             lines.append(markdown_table(summarize_quality_rows(rows), ["type", "value", "count"]))
+             lines.append("")
+ 
+-        lines.append("## 3. Matrices de confusion")
++        matrix_section = "4" if threshold_rows else "3"
++        lines.append(f"## {matrix_section}. Matrices de confusion")
+         lines.append("")
+         for path in prediction_files:
+             rows = read_csv(path)
+@@ -182,7 +235,8 @@
+             lines.append("")
+ 
+     if error_files:
+-        lines.append("## 4. Registres d'erreurs")
++        error_section = "5" if threshold_rows else "4"
++        lines.append(f"## {error_section}. Registres d'erreurs")
+         lines.append("")
+         for path in error_files:
+             rows = read_csv(path)
+@@ -201,7 +255,8 @@
+             lines.append("")
+ 
+     if case_review_rows:
+-        lines.append("## 5. Template des 20 à 30 cas commentés")
++        review_section = "6" if threshold_rows else "5"
++        lines.append(f"## {review_section}. Template des 20 à 30 cas commentés")
+         lines.append("")
+         lines.append(
+             "Le fichier `case_review_template.csv` pré-sélectionne les cas à commenter "
+@@ -225,7 +280,8 @@
+         )
+         lines.append("")
+ 
+-    lines.append("## 6. Lecture responsable")
++    responsible_section = "7" if threshold_rows else "6"
++    lines.append(f"## {responsible_section}. Lecture responsable")
+     lines.append("")
+     lines.append(
+         "Ce rapport sert à défendre la chaîne d'ingénierie : JSON valide, logs, métriques, "
+diff -ruN '--exclude=.DS_Store' '--exclude=medical_ai_evidence.sqlite' '--exclude=__pycache__' '--exclude=.pytest_cache' arvirx6/Assistant-Radiologue-IA/eval/run_evaluation.py arvirx6_mod/eval/run_evaluation.py
+--- a/eval/run_evaluation.py	2026-06-28 20:27:13.000000000 +0000
++++ b/eval/run_evaluation.py	2026-06-28 20:37:06.624646157 +0000
+@@ -15,6 +15,7 @@
+ from src.database import insert_run, insert_evaluation, init_db
+ from eval.reporting import generate_evaluation_report
+ from eval.case_review import build_case_review_template
++from eval.threshold_sweep import generate_threshold_sweep
+ 
+ # Mapping mode → fonction d'inférence
+ INFERENCE_MAP = {
+@@ -211,10 +212,13 @@
+             print(f"   {k}: {v}", file=sys.stderr)
+ 
+     write_csv(out_dir / "before_after_summary.csv", summary)
++    threshold_sweep_path = generate_threshold_sweep(out_dir)
+     case_review_path = build_case_review_template(out_dir, out_dir / "case_review_template.csv", limit=30)
+     report_path = generate_evaluation_report(out_dir, out_dir / "evaluation_report.md")
+     print(f"\n[DONE] Resultats ecrits dans {out_dir}", file=sys.stderr)
+     print(f"[DONE] Rapport Markdown : {report_path}", file=sys.stderr)
++    if threshold_sweep_path is not None:
++        print(f"[DONE] Analyse des seuils : {threshold_sweep_path}", file=sys.stderr)
+     if case_review_path is not None:
+         print(f"[DONE] Template revue de cas : {case_review_path}", file=sys.stderr)
+     print(json.dumps(summary, indent=2, ensure_ascii=False))
+diff -ruN '--exclude=.DS_Store' '--exclude=medical_ai_evidence.sqlite' '--exclude=__pycache__' '--exclude=.pytest_cache' arvirx6/Assistant-Radiologue-IA/eval/threshold_sweep.py arvirx6_mod/eval/threshold_sweep.py
+--- a/eval/threshold_sweep.py	1970-01-01 00:00:00.000000000 +0000
++++ b/eval/threshold_sweep.py	2026-06-28 20:36:53.190421385 +0000
+@@ -0,0 +1,141 @@
++from __future__ import annotations
++
++import csv
++from pathlib import Path
++from typing import Any
++
++ROOT = Path(__file__).resolve().parents[1]
++
++from src.metrics import summarize_metrics
++
++DEFAULT_THRESHOLDS = [0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80]
++
++
++def read_csv(path: Path) -> list[dict[str, str]]:
++    if not path.exists():
++        return []
++    with path.open("r", encoding="utf-8", newline="") as file:
++        return list(csv.DictReader(file))
++
++
++def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
++    if not rows:
++        return
++    path.parent.mkdir(parents=True, exist_ok=True)
++    with path.open("w", encoding="utf-8", newline="") as file:
++        writer = csv.DictWriter(file, fieldnames=list(rows[0].keys()))
++        writer.writeheader()
++        writer.writerows(rows)
++
++
++def _as_bool(value: Any) -> bool:
++    if isinstance(value, bool):
++        return value
++    return str(value).strip().lower() in {"1", "true", "yes", "y", "oui"}
++
++
++def _as_float(value: Any, default: float = 0.0) -> float:
++    try:
++        return float(value)
++    except Exception:
++        return default
++
++
++def mode_from_prediction_file(path: Path) -> str:
++    """Extrait un nom de mode lisible depuis `baseline_predictions.csv` ou variantes."""
++    name = path.name
++    suffix = "_predictions.csv"
++    if name.endswith(suffix):
++        return name[: -len(suffix)]
++    return path.stem
++
++
++def apply_uncertainty_threshold(rows: list[dict[str, str]], threshold: float) -> list[dict[str, Any]]:
++    """Applique une politique d'abstention par seuil de confiance.
++
++    Règle pédagogique : si la confiance est inférieure au seuil, ou si la qualité
++    image est `poor`, la prédiction est remplacée par `uncertain`. On ne modifie
++    pas les autres champs : l'objectif est de comparer des politiques de sécurité
++    à modèle constant.
++    """
++    adjusted: list[dict[str, Any]] = []
++    for row in rows:
++        original = row.get("predicted_class", "uncertain")
++        confidence = _as_float(row.get("confidence"), 0.0)
++        image_quality = row.get("image_quality", "")
++        new_row: dict[str, Any] = dict(row)
++        new_row["label"] = row.get("label", "")
++        new_row["json_valid"] = _as_bool(row.get("json_valid", True))
++        new_row["warning"] = row.get("warning", "")
++        new_row["latency_ms"] = _as_float(row.get("latency_ms"), 0.0)
++        new_row["predicted_class"] = original
++        new_row["threshold_changed_to_uncertain"] = False
++
++        if image_quality == "poor" or confidence < threshold:
++            new_row["predicted_class"] = "uncertain"
++            new_row["threshold_changed_to_uncertain"] = original != "uncertain"
++
++        adjusted.append(new_row)
++    return adjusted
++
++
++def sweep_prediction_file(path: Path, thresholds: list[float] | None = None) -> list[dict[str, Any]]:
++    """Calcule les métriques obtenues pour plusieurs seuils sur un fichier de prédictions."""
++    rows = read_csv(path)
++    if not rows:
++        return []
++    thresholds = thresholds or DEFAULT_THRESHOLDS
++    mode = mode_from_prediction_file(path)
++
++    sweep_rows: list[dict[str, Any]] = []
++    for threshold in thresholds:
++        adjusted = apply_uncertainty_threshold(rows, threshold)
++        metrics = summarize_metrics(adjusted)
++        changed_count = sum(bool(row.get("threshold_changed_to_uncertain")) for row in adjusted)
++        sweep_rows.append(
++            {
++                "prediction_file": path.name,
++                "mode": mode,
++                "threshold": round(float(threshold), 2),
++                **metrics,
++                "changed_to_uncertain_rate": round(changed_count / len(adjusted), 4) if adjusted else 0.0,
++            }
++        )
++    return sweep_rows
++
++
++def generate_threshold_sweep(out_dir: Path, thresholds: list[float] | None = None) -> Path | None:
++    """Génère `threshold_sweep.csv` à partir des `*_predictions.csv` existants."""
++    out_dir = Path(out_dir)
++    prediction_files = sorted(out_dir.glob("*_predictions.csv"))
++    if not prediction_files:
++        return None
++
++    rows: list[dict[str, Any]] = []
++    for path in prediction_files:
++        rows.extend(sweep_prediction_file(path, thresholds=thresholds))
++
++    if not rows:
++        return None
++
++    output_path = out_dir / "threshold_sweep.csv"
++    write_csv(output_path, rows)
++    return output_path
++
++
++if __name__ == "__main__":
++    import argparse
++
++    parser = argparse.ArgumentParser(description="Analyse des seuils d'incertitude à partir des prédictions CSV.")
++    parser.add_argument("--out-dir", type=Path, default=ROOT / "eval" / "outputs")
++    parser.add_argument(
++        "--thresholds",
++        default="0.50,0.55,0.60,0.65,0.70,0.75,0.80",
++        help="Liste de seuils séparés par des virgules.",
++    )
++    args = parser.parse_args()
++    thresholds = [float(value.strip()) for value in args.thresholds.split(",") if value.strip()]
++    path = generate_threshold_sweep(args.out_dir, thresholds=thresholds)
++    if path is None:
++        raise SystemExit("Aucun fichier *_predictions.csv trouvé.")
++    print(path)
+diff -ruN '--exclude=.DS_Store' '--exclude=medical_ai_evidence.sqlite' '--exclude=__pycache__' '--exclude=.pytest_cache' arvirx6/Assistant-Radiologue-IA/tests/test_repository_smoke.py arvirx6_mod/tests/test_repository_smoke.py
+--- a/tests/test_repository_smoke.py	2026-06-28 20:27:13.000000000 +0000
++++ b/tests/test_repository_smoke.py	2026-06-28 20:38:17.271593499 +0000
+@@ -42,6 +42,7 @@
+         "eval/reporting.py",
+         "eval/case_review.py",
+         "eval/generate_case_review.py",
++        "eval/threshold_sweep.py",
+         "prompts/json_schema.md",
+     ]
+     forbidden_paths = [
+@@ -195,6 +196,7 @@
+     assert all(row["warning_rate"] == 1.0 for row in summary)
+     assert (out_dir / "before_after_summary.csv").exists()
+     assert (out_dir / "evaluation_report.md").exists()
++    assert (out_dir / "threshold_sweep.csv").exists()
+     assert (out_dir / "case_review_template.csv").exists()
+     review_rows = list(csv.DictReader((out_dir / "case_review_template.csv").open(encoding="utf-8")))
+     assert 20 <= len(review_rows) <= 30
+@@ -219,8 +221,13 @@
+         "quality_aspect_ratio",
+         "quality_reasons",
+     } <= set(prediction_rows[0])
++    threshold_rows = list(csv.DictReader((out_dir / "threshold_sweep.csv").open(encoding="utf-8")))
++    assert len(threshold_rows) >= 10
++    assert {"mode", "threshold", "macro_f1", "uncertain_rate", "changed_to_uncertain_rate"} <= set(threshold_rows[0])
++    assert {"baseline", "improved"} <= {row["mode"] for row in threshold_rows}
+     report_text = (out_dir / "evaluation_report.md").read_text(encoding="utf-8")
+     assert "Rapport d'évaluation automatique" in report_text
++    assert "Analyse des seuils d'incertitude" in report_text
+     assert "Contrôle qualité image" in report_text
+     assert "Template des 20 à 30 cas commentés" in report_text
+     assert db_path.exists()

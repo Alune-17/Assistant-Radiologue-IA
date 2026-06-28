@@ -48,11 +48,13 @@ Cette commande génère dans `eval/outputs/` :
 - `*_predictions.csv` : prédictions détaillées avec contrôles qualité image ;
 - `*_error_register.csv` : registre d'erreurs ;
 - `evaluation_report.md` : rapport automatique ;
+- `threshold_sweep.csv` : analyse du compromis seuil de confiance / abstention ;
 - `case_review_template.csv` : tableau à compléter pour les 20 à 30 cas commentés.
 
-Vous pouvez aussi régénérer uniquement le template de revue humaine :
+Vous pouvez aussi régénérer uniquement l'analyse des seuils d'incertitude ou le template de revue humaine :
 
 ```bash
+python eval/threshold_sweep.py --out-dir eval/outputs
 python eval/generate_case_review.py --out-dir eval/outputs --limit 30
 ```
 
@@ -96,6 +98,7 @@ Assistant-Radiologue-IA/
 │   ├── run_evaluation.py               Script d'évaluation batch
 │   ├── reporting.py                    Rapport Markdown automatique
 │   ├── case_review.py                  Génération du tableau des cas commentés
+│   ├── threshold_sweep.py               Analyse des seuils de confiance / abstention
 │   ├── generate_report.py              CLI pour régénérer le rapport
 │   ├── generate_case_review.py         CLI pour régénérer la revue de cas
 │   └── error_register_template.csv     Template du registre d'erreurs
@@ -178,7 +181,7 @@ Vérifie : structure du dépôt, contrat dataset, schéma JSON, garde-fous, cont
 | Niveau | Attendu |
 |---|---|
 | **MUST** | Baseline reproductible, sortie JSON valide, warning obligatoire, logs, métriques, contrôle qualité image, mini-rapport |
-| **SHOULD** | Prompt amélioré, comparaison baseline/amélioration, dashboard, registre d'erreurs, template 20-30 cas commentés |
+| **SHOULD** | Prompt amélioré, comparaison baseline/amélioration, dashboard, registre d'erreurs, seuils d'incertitude, template 20-30 cas commentés |
 | **COULD** | LoRA expérimental, MedGemma/PEFT, localisation visuelle, ablations de prompts |
 
 ---

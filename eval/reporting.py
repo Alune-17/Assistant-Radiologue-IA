@@ -104,6 +104,30 @@ def summarize_quality_rows(prediction_rows: list[dict[str, str]]) -> list[dict[s
     return rows
 
 
+
+
+def summarize_threshold_sweep(rows: list[dict[str, str]]) -> list[dict[str, Any]]:
+    """Sélectionne quelques seuils lisibles pour le rapport Markdown."""
+    if not rows:
+        return []
+    interesting = {"0.5", "0.6", "0.7", "0.8", "0.50", "0.60", "0.70", "0.80"}
+    filtered = [row for row in rows if str(row.get("threshold", "")) in interesting]
+    if not filtered:
+        filtered = rows
+    return [
+        {
+            "mode": row.get("mode", ""),
+            "threshold": row.get("threshold", ""),
+            "accuracy": row.get("accuracy", ""),
+            "macro_f1": row.get("macro_f1", ""),
+            "sensitivity": row.get("sensitivity", ""),
+            "specificity": row.get("specificity", ""),
+            "uncertain_rate": row.get("uncertain_rate", ""),
+            "changed_to_uncertain_rate": row.get("changed_to_uncertain_rate", ""),
+        }
+        for row in filtered
+    ]
+
 def generate_evaluation_report(out_dir: Path, report_path: Path) -> Path:
     """Génère un rapport Markdown lisible à partir des CSV d'évaluation.
 
@@ -118,6 +142,7 @@ def generate_evaluation_report(out_dir: Path, report_path: Path) -> Path:
     prediction_files = sorted(out_dir.glob("*_predictions.csv"))
     error_files = sorted(out_dir.glob("*_error_register.csv"))
     case_review_rows = read_csv(out_dir / "case_review_template.csv")
+    threshold_rows = read_csv(out_dir / "threshold_sweep.csv")
 
     lines: list[str] = []
     lines.append("# Rapport d'évaluation automatique")
@@ -151,8 +176,35 @@ def generate_evaluation_report(out_dir: Path, report_path: Path) -> Path:
         )
     )
 
+    if threshold_rows:
+        lines.append("## 2. Analyse des seuils d'incertitude")
+        lines.append("")
+        lines.append(
+            "Cette section post-traite les prédictions avec plusieurs seuils de confiance. "
+            "Elle permet de documenter le compromis entre performance brute et abstention prudente : "
+            "plus le seuil augmente, plus le système bascule vers `uncertain`."
+        )
+        lines.append("")
+        lines.append(
+            markdown_table(
+                summarize_threshold_sweep(threshold_rows),
+                [
+                    "mode",
+                    "threshold",
+                    "accuracy",
+                    "macro_f1",
+                    "sensitivity",
+                    "specificity",
+                    "uncertain_rate",
+                    "changed_to_uncertain_rate",
+                ],
+            )
+        )
+        lines.append("")
+
     if prediction_files:
-        lines.append("## 2. Contrôle qualité image")
+        section_number = "3" if threshold_rows else "2"
+        lines.append(f"## {section_number}. Contrôle qualité image")
         lines.append("")
         lines.append(
             "Cette section documente le prétraitement minimal : résolution, contraste, "
@@ -167,7 +219,8 @@ def generate_evaluation_report(out_dir: Path, report_path: Path) -> Path:
             lines.append(markdown_table(summarize_quality_rows(rows), ["type", "value", "count"]))
             lines.append("")
 
-        lines.append("## 3. Matrices de confusion")
+        matrix_section = "4" if threshold_rows else "3"
+        lines.append(f"## {matrix_section}. Matrices de confusion")
         lines.append("")
         for path in prediction_files:
             rows = read_csv(path)
@@ -182,7 +235,8 @@ def generate_evaluation_report(out_dir: Path, report_path: Path) -> Path:
             lines.append("")
 
     if error_files:
-        lines.append("## 4. Registres d'erreurs")
+        error_section = "5" if threshold_rows else "4"
+        lines.append(f"## {error_section}. Registres d'erreurs")
         lines.append("")
         for path in error_files:
             rows = read_csv(path)
@@ -201,7 +255,8 @@ def generate_evaluation_report(out_dir: Path, report_path: Path) -> Path:
             lines.append("")
 
     if case_review_rows:
-        lines.append("## 5. Template des 20 à 30 cas commentés")
+        review_section = "6" if threshold_rows else "5"
+        lines.append(f"## {review_section}. Template des 20 à 30 cas commentés")
         lines.append("")
         lines.append(
             "Le fichier `case_review_template.csv` pré-sélectionne les cas à commenter "
@@ -225,7 +280,8 @@ def generate_evaluation_report(out_dir: Path, report_path: Path) -> Path:
         )
         lines.append("")
 
-    lines.append("## 6. Lecture responsable")
+    responsible_section = "7" if threshold_rows else "6"
+    lines.append(f"## {responsible_section}. Lecture responsable")
     lines.append("")
     lines.append(
         "Ce rapport sert à défendre la chaîne d'ingénierie : JSON valide, logs, métriques, "
