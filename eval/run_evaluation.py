@@ -9,7 +9,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT))
 
-from src.inference import toy_predict, groq_predict_baseline, groq_predict_improved
+from src.inference import toy_predict, groq_predict_baseline, groq_predict_improved, groq_predict
 from src.guardrails import apply_safety_guardrails, validate_prediction
 from src.metrics import summarize_metrics
 from src.database import insert_run, insert_evaluation, init_db
@@ -18,17 +18,17 @@ from eval.case_review import build_case_review_template
 from eval.threshold_sweep import generate_threshold_sweep
 from eval.calibration import generate_calibration_report
 
-# Mapping mode → fonction d'inférence
 INFERENCE_MAP = {
     "baseline": lambda p: toy_predict(p, mode="baseline"),
     "improved": lambda p: toy_predict(p, mode="improved"),
     "groq-baseline": groq_predict_baseline,
     "groq-improved": groq_predict_improved,
+    "groq-fr": groq_predict,
 }
 
 
 def read_cases(path: Path) -> list[dict]:
-    with path.open(newline="", encoding="utf-8") as f:
+    with path.open(newline="", encoding="utf-8-sig") as f:
         return list(csv.DictReader(f))
 
 
@@ -165,12 +165,12 @@ def main() -> None:
     )
     parser.add_argument(
         "--mode",
-        choices=["toy", "baseline", "improved", "groq-baseline", "groq-improved", "all-groq"],
+        choices=["toy", "baseline", "improved", "groq-baseline", "groq-improved", "groq-fr", "all-groq"],
         default="baseline",
         help=(
             "'baseline'/'improved' : toy deterministe. "
-            "'groq-baseline'/'groq-improved' : appels API Groq. "
-            "'all-groq' : compare les deux modes Groq. "
+            "'groq-baseline'/'groq-improved'/'groq-fr' : appels API Groq. "
+            "'all-groq' : compare les trois modes Groq. "
             "'toy' : alias pour baseline+improved (toy)."
         ),
     )
@@ -194,7 +194,7 @@ def main() -> None:
     if args.mode == "toy":
         modes = ["baseline", "improved"]
     elif args.mode == "all-groq":
-        modes = ["groq-baseline", "groq-improved"]
+        modes = ["groq-baseline", "groq-improved", "groq-fr"]
     else:
         modes = [args.mode]
 
