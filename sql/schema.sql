@@ -38,3 +38,15 @@ CREATE TABLE IF NOT EXISTS evaluations (
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(run_id) REFERENCES runs(id)
 );
+
+-- Nettoyage des doublons existants dans la table runs
+-- On ne garde que la ligne avec l'ID le plus grand (le plus récent) pour chaque combinaison
+DELETE FROM runs
+WHERE id NOT IN (
+    SELECT MAX(id)
+    FROM runs
+    GROUP BY case_id, model_name, prompt_version
+);
+
+-- Création de l'index unique pour appliquer la contrainte d'unicité
+CREATE UNIQUE INDEX IF NOT EXISTS idx_runs_unique ON runs(case_id, model_name, prompt_version);

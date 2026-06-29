@@ -15,6 +15,7 @@ from PIL import Image
 from src.inference import toy_predict, groq_predict, groq_predict_baseline, groq_predict_improved
 from src.guardrails import apply_safety_guardrails
 from src.database import fetch_error_counts, fetch_recent_runs, insert_run
+from src.metrics import accuracy, macro_f1, sensitivity, specificity, confusion_counts
 
 ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = Path(os.getenv("ARVIRX_DB_PATH", ROOT / "medical_ai_evidence.sqlite"))
@@ -37,10 +38,10 @@ st.warning(
 def render_analysis_tab() -> None:
     # ── Sélecteur de modèle ───────────────────────────────────────────────────────
     model_options = {
-        "🎲 Toy Baseline (local, sans API)": ("toy", "baseline"),
-        "🤖 Groq Llama 4 Scout — Prompt Baseline": ("groq", "baseline"),
-        "🤖 Groq Llama 4 Scout — Prompt Amélioré": ("groq", "improved"),
-        "🌐 Groq Llama 4 Scout — Prompt Français": ("groq", "fr"),
+        "Toy Baseline (local, sans API)": ("toy", "baseline"),
+        "Groq Llama 4 Scout — Prompt Baseline": ("groq", "baseline"),
+        "Groq Llama 4 Scout — Prompt Amélioré": ("groq", "improved"),
+        "Groq Llama 4 Scout — Prompt Français": ("groq", "fr"),
     }
 
     mode_label = st.selectbox("Modèle d'analyse", list(model_options.keys()))
@@ -53,7 +54,7 @@ def render_analysis_tab() -> None:
 
     if not uploaded:
         st.info(
-            "💡 Utilisez les images synthétiques dans `data/synthetic/images/` pour tester le flux.\n\n"
+            "Utilisez les images synthétiques dans `data/synthetic/images/` pour tester le flux.\n\n"
             "Exemple : `CXR_SYN_001_normal.png`, `CXR_SYN_002_suspected_opacity.png`, etc."
         )
         return
@@ -98,7 +99,7 @@ def render_analysis_tab() -> None:
 
         st.divider()
 
-        st.markdown("**📋 Observations visuelles**")
+        st.markdown("**Observations visuelles**")
         for obs in pred.get("visual_evidence", []):
             st.markdown(f"- {obs}")
 
@@ -111,7 +112,7 @@ def render_analysis_tab() -> None:
 
         quality_checks = pred.get("quality_checks", {})
         if isinstance(quality_checks, dict) and quality_checks:
-            st.markdown("**🧪 Contrôle qualité image**")
+            st.markdown("**Contrôle qualité image**")
             q_cols = st.columns(4)
             q_cols[0].metric("Taille", f"{quality_checks.get('width', 0)}×{quality_checks.get('height', 0)}")
             q_cols[1].metric("Luminosité", quality_checks.get("brightness", "—"))
@@ -121,12 +122,12 @@ def render_analysis_tab() -> None:
             if reasons:
                 st.caption("Raisons : " + " ; ".join(str(reason) for reason in reasons))
 
-        st.markdown(f"**🕐 Latence** : `{pred.get('latency_ms', 0)} ms`")
-        st.markdown(f"**🤖 Modèle** : `{pred.get('model_name', '—')}`")
-        st.markdown(f"**📝 Prompt** : `{pred.get('prompt_version', '—')}`")
+        st.markdown(f"**Latence** : `{pred.get('latency_ms', 0)} ms`")
+        st.markdown(f"**Modèle** : `{pred.get('model_name', '—')}`")
+        st.markdown(f"**Prompt** : `{pred.get('prompt_version', '—')}`")
 
         st.divider()
-        st.markdown("**📦 JSON complet**")
+        st.markdown("**JSON complet**")
         st.json(pred)
 
 
@@ -296,8 +297,97 @@ def render_dashboard_tab() -> None:
         st.info("Aucun run SQLite encore enregistré.")
 
 
-tab_analysis, tab_dashboard = st.tabs(["Analyse IA", "Dashboard"])
+def render_compare_tab() -> None:
+    st.subheader("Comparaison Globale des Prompts (Dataset d'Évaluation)")
+    st.caption(
+        "Comparaison des matrices de confusion et des métriques médicales (Sensibilité/Rappel, Spécificité) "
+        "calculées sur le pool complet d'images évalué hors-ligne."
+    )
+    
+    prediction_files = sorted(OUTPUT_DIR.glob("*_predictions.csv"))
+    if not prediction_files:
+        st.warning("Aucun fichier de prédiction trouvé dans `eval/outputs/`. Lancez d'abord le script d'évaluation.")
+        return
+
+    results = []
+    confusion_matrices = {}
+
+    for file_path in prediction_files:
+        mode_name = file_path.name.replace("_chexpert_cases_predictions.csv", "")
+        df = pd.read_csv(file_path)
+        
+        if "label" not in df.columns or "predicted_class" not in df.columns:
+            continue
+            
+        y_true = df["label"].tolist()
+        y_pred = df["predicted_class"].tolist()
+        
+        acc = accuracy(y_true, y_pred)
+        f1 = macro_f1(y_true, y_pred)
+        sens = sensitivity(y_true, y_pred) # Recall sur "suspected_opacity"
+        spec = specificity(y_true, y_pred) # Spécificité sur "normal"
+        
+        results.append({
+            "Prompt / Modèle": mode_name,
+            "Sensibilité (Recall)": round(sens, 3),
+            "Spécificité": round(spec, 3),
+            "Accuracy": round(acc, 3),
+            "Macro F1": round(f1, 3)
+        })
+        
+        cm = pd.crosstab(
+            pd.Series(y_true, name="Vraie Classe (Ground Truth)"),
+            pd.Series(y_pred, name="Prédiction IA"),
+            dropna=False
+        )
+        
+        for cls in ["normal", "suspected_opacity", "uncertain"]:
+            if cls not in cm.columns:
+                cm[cls] = 0
+            if cls not in cm.index:
+                cm.loc[cls] = 0
+                
+        cm = cm.reindex(
+            index=["normal", "suspected_opacity", "uncertain"], 
+            columns=["normal", "suspected_opacity", "uncertain"], 
+            fill_value=0
+        )
+        confusion_matrices[mode_name] = cm
+
+    if not results:
+        st.warning("Les fichiers de prédiction n'ont pas les colonnes attendues ('label', 'predicted_class').")
+        return
+
+    res_df = pd.DataFrame(results).set_index("Prompt / Modèle")
+    
+    st.markdown("### Comparaison du Rappel (Sensibilité)")
+    st.info(
+        "En contexte médical, le **Rappel (Sensibilité)** sur la classe `suspected_opacity` est la métrique "
+        "la plus critique pour éviter les faux négatifs (rater un patient malade)."
+    )
+    st.bar_chart(res_df[["Sensibilité (Recall)", "Spécificité"]])
+    
+    st.markdown("### Tableau Récapitulatif des Métriques")
+    st.dataframe(
+        res_df.style.highlight_max(subset=["Sensibilité (Recall)", "Macro F1"], color="#2c4d2d"), 
+        use_container_width=True
+    )
+
+    st.markdown("### Matrices de Confusion Détaillées")
+    st.caption("Lecture : Les lignes correspondent au diagnostic réel, les colonnes à ce que l'IA a prédit.")
+    
+    # 3 colonnes si possible, ou fallback dynamique
+    cols = st.columns(len(confusion_matrices) if len(confusion_matrices) > 0 else 1)
+    for i, (mode_name, cm) in enumerate(confusion_matrices.items()):
+        with cols[i % len(cols)]:
+            st.markdown(f"**{mode_name}**")
+            st.dataframe(cm, use_container_width=True)
+
+
+tab_analysis, tab_dashboard, tab_compare = st.tabs(["Analyse IA", "Dashboard", "Comparaison Prompts"])
 with tab_analysis:
     render_analysis_tab()
 with tab_dashboard:
     render_dashboard_tab()
+with tab_compare:
+    render_compare_tab()

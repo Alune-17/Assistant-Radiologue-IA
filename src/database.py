@@ -33,6 +33,13 @@ def insert_run(db_path: str | Path, case_id: str, image_path: str, prediction: d
         """
         INSERT INTO runs(case_id, image_path, model_name, prompt_version, prediction_json, predicted_class, confidence, latency_ms)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(case_id, model_name, prompt_version) DO UPDATE SET
+            image_path = excluded.image_path,
+            prediction_json = excluded.prediction_json,
+            predicted_class = excluded.predicted_class,
+            confidence = excluded.confidence,
+            latency_ms = excluded.latency_ms,
+            created_at = CURRENT_TIMESTAMP
         """,
         (
             case_id,
